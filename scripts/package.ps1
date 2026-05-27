@@ -146,6 +146,22 @@ function Clear-PackageRuntimeData {
     }
 }
 
+function Assert-PowerShellScriptsParse {
+    $scriptFiles = @(
+        Get-ChildItem -LiteralPath (Join-Path $Root 'assets\lib') -Filter '*.ps1' -File
+        Get-ChildItem -LiteralPath (Join-Path $Root 'scripts') -Filter '*.ps1' -File
+    )
+    foreach ($scriptFile in $scriptFiles) {
+        $tokens = $null
+        $errors = $null
+        [System.Management.Automation.Language.Parser]::ParseFile($scriptFile.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+        if ($errors -and $errors.Count -gt 0) {
+            $message = ($errors | ForEach-Object { $_.Message }) -join '; '
+            throw "PowerShell parser check failed for $($scriptFile.FullName): $message"
+        }
+    }
+}
+
 function New-CleanDirectory {
     param([string]$Path)
     if (Test-Path -LiteralPath $Path) { Remove-Item -LiteralPath $Path -Recurse -Force }
@@ -200,6 +216,7 @@ Update-VersionFiles -OldVersion $currentVersion -NewVersion $newVersion
 Assert-ReleaseStubs
 Assert-RequiredTools
 Clear-PackageRuntimeData
+Assert-PowerShellScriptsParse
 New-Item -ItemType Directory -Path $DistDir -Force | Out-Null
 
 if (-not $NoBuild) {
