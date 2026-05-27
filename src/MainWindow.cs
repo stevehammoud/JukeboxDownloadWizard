@@ -111,7 +111,7 @@ namespace JukeboxDownloadWizard
             resourcesDir = Path.Combine(packageRoot, "resources");
             resourceCacheDir = Path.Combine(assetsDir, "resources", "cache");
             downloadsDir = Path.Combine(packageRoot, "downloads");
-            logsDir = Path.Combine(dataRoot, "logs");
+            logsDir = Path.Combine(packageRoot, "logs");
             archiveLogDir = Path.Combine(logsDir, "ARCHIVE_LOGS");
             consoleLogDir = logsDir;
             sessionStamp = DateTime.Now.ToString("yyyyMMddHHmmss");
@@ -120,6 +120,7 @@ namespace JukeboxDownloadWizard
             urlFile = Path.Combine(resourcesDir, "jukebox_urls.txt");
             HideInternalAppFolder();
             MigrateHiddenDownloadsFolder();
+            MigrateHiddenLogsFolder();
             RotateArchiveLogs();
 
             Title = "Jukebox Download Wizard v" + AppVersion;
@@ -2542,6 +2543,34 @@ namespace JukeboxDownloadWizard
             catch (Exception ex)
             {
                 WriteOutput("Download rollback warning: " + ex.Message);
+            }
+        }
+
+        private void MigrateHiddenLogsFolder()
+        {
+            try
+            {
+                string oldLogsDir = Path.Combine(dataRoot, "logs");
+                if (!Directory.Exists(oldLogsDir)) { return; }
+
+                Directory.CreateDirectory(logsDir);
+                foreach (string oldPath in Directory.GetFiles(oldLogsDir, "*", SearchOption.AllDirectories))
+                {
+                    string relativePath = oldPath.Substring(oldLogsDir.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                    string newPath = Path.Combine(logsDir, relativePath);
+                    string newParent = Path.GetDirectoryName(newPath);
+                    if (!String.IsNullOrWhiteSpace(newParent)) { Directory.CreateDirectory(newParent); }
+                    if (File.Exists(newPath)) { newPath = GetUniqueFilePath(newParent, Path.GetFileName(newPath)); }
+                    File.Move(oldPath, newPath);
+                }
+
+                if (Directory.GetFiles(oldLogsDir, "*", SearchOption.AllDirectories).Length == 0)
+                {
+                    Directory.Delete(oldLogsDir, true);
+                }
+            }
+            catch
+            {
             }
         }
 
