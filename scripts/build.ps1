@@ -12,3 +12,4 @@ $Refs = @(
 )
 $RefArgs = $Refs | ForEach-Object { "/reference:$_" }
 & "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /target:winexe /platform:anycpu "/out:$Out" "/win32icon:$Icon" $RefArgs /reference:System.Windows.Forms.dll /reference:System.Drawing.dll (Join-Path $Root "src\AssemblyInfo.cs") (Join-Path $Root "src\Program.cs") (Join-Path $Root "src\MainWindow.cs")
+if ($LASTEXITCODE -ne 0) { throw "C# build failed with exit code $LASTEXITCODE" }

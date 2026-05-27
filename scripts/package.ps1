@@ -131,6 +131,21 @@ function Assert-ReleaseStubs {
     Assert-RequiredFile -Path (Join-Path $Root 'resources\fanart_personal_api_key.example.txt') -Message 'Missing resources\fanart_personal_api_key.example.txt'
 }
 
+function Clear-PackageRuntimeData {
+    $runtimePaths = @(
+        (Join-Path $Root 'assets\resources\cache'),
+        (Join-Path $Root 'assets\resources\temp'),
+        (Join-Path $Root 'downloads'),
+        (Join-Path $Root 'logs'),
+        (Join-Path $Root '.jukebox_download_wizard')
+    )
+    foreach ($path in $runtimePaths) {
+        if (Test-Path -LiteralPath $path) {
+            Remove-Item -LiteralPath $path -Recurse -Force
+        }
+    }
+}
+
 function New-CleanDirectory {
     param([string]$Path)
     if (Test-Path -LiteralPath $Path) { Remove-Item -LiteralPath $Path -Recurse -Force }
@@ -184,6 +199,7 @@ Update-VersionFiles -OldVersion $currentVersion -NewVersion $newVersion
 
 Assert-ReleaseStubs
 Assert-RequiredTools
+Clear-PackageRuntimeData
 New-Item -ItemType Directory -Path $DistDir -Force | Out-Null
 
 if (-not $NoBuild) {

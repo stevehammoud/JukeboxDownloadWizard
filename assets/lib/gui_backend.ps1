@@ -248,7 +248,7 @@ function Video-Preview {
 
     try {
         Write-Host 'Reviewing video...'
-        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $LibDir 'review_urls.ps1') -UrlFile $tmp -ExistingUrlFile $UrlFile -MinDurationSeconds $MinDurationSeconds -MaxDurationSeconds $MaxDurationSeconds -OutputDetailsFile $previewFile -CacheFile $MetadataCacheFile -RequireMusicBrainzMetadata 2>&1 | Tee-Object -FilePath $UrlLog -Append
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $LibDir 'review_urls.ps1') -UrlFile $tmp -ExistingUrlFile $UrlFile -MinDurationSeconds $MinDurationSeconds -MaxDurationSeconds $MaxDurationSeconds -OutputDetailsFile $previewFile -CacheFile $MetadataCacheFile -EnrichMusicBrainzMetadata 2>&1 | Tee-Object -FilePath $UrlLog -Append
         if ($LASTEXITCODE -ne 0) { throw 'Video review failed.' }
         Write-Host "PREVIEW_FILE|$previewFile"
     } finally {
@@ -325,7 +325,7 @@ function Search-VideosPreview {
         }
 
         Write-Host 'Reviewing search candidates...'
-        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $LibDir 'review_urls.ps1') -UrlFile $tmp -ExistingUrlFile $UrlFile -MinDurationSeconds $MinDurationSeconds -MaxDurationSeconds $MaxDurationSeconds -OutputDetailsFile $previewFile -CacheFile $MetadataCacheFile -RequireMusicBrainzMetadata 2>&1 | Tee-Object -FilePath $UrlLog -Append
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $LibDir 'review_urls.ps1') -UrlFile $tmp -ExistingUrlFile $UrlFile -MinDurationSeconds $MinDurationSeconds -MaxDurationSeconds $MaxDurationSeconds -OutputDetailsFile $previewFile -CacheFile $MetadataCacheFile -EnrichMusicBrainzMetadata 2>&1 | Tee-Object -FilePath $UrlLog -Append
         if ($LASTEXITCODE -ne 0) { throw 'Search candidate review failed.' }
         Write-Host "PREVIEW_FILE|$previewFile"
     } finally {
@@ -353,7 +353,7 @@ function Source-VideosPreview {
         }
 
         Write-Host 'Reviewing source candidates...'
-        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $LibDir 'review_urls.ps1') -UrlFile $tmp -ExistingUrlFile $UrlFile -MinDurationSeconds $MinDurationSeconds -MaxDurationSeconds $MaxDurationSeconds -OutputDetailsFile $previewFile -CacheFile $MetadataCacheFile -RequireMusicBrainzMetadata 2>&1 | Tee-Object -FilePath $UrlLog -Append
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $LibDir 'review_urls.ps1') -UrlFile $tmp -ExistingUrlFile $UrlFile -MinDurationSeconds $MinDurationSeconds -MaxDurationSeconds $MaxDurationSeconds -OutputDetailsFile $previewFile -CacheFile $MetadataCacheFile -EnrichMusicBrainzMetadata 2>&1 | Tee-Object -FilePath $UrlLog -Append
         if ($LASTEXITCODE -ne 0) { throw 'Source candidate review failed.' }
         Write-Host "PREVIEW_FILE|$previewFile"
     } finally {

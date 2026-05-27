@@ -5,6 +5,7 @@ param(
     [int]$MaxDurationSeconds = 3600,
     [string]$OutputDetailsFile = '',
     [string]$CacheFile = '',
+    [switch]$EnrichMusicBrainzMetadata,
     [switch]$RequireMusicBrainzMetadata
 )
 
@@ -288,13 +289,13 @@ function Get-MetadataRecord {
     $mbArtist = ''
     $mbTitle = ''
     $mbReleaseDate = ''
-    if ($approved -and $RequireMusicBrainzMetadata) {
+    if ($approved -and ($RequireMusicBrainzMetadata -or $EnrichMusicBrainzMetadata)) {
         $mb = Get-MusicBrainzMatch -VideoTitle ([string]$meta.title)
         if ($mb) {
             $mbArtist = [string]$mb.Artist
             $mbTitle = [string]$mb.Title
             $mbReleaseDate = [string]$mb.ReleaseDate
-        } else {
+        } elseif ($RequireMusicBrainzMetadata) {
             $approved = $false
             $reason = 'artist/title not found'
         }

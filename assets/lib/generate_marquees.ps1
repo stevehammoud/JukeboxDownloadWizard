@@ -62,7 +62,7 @@ function Repair-TextEncoding {
     $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0092), '-'
     $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0093), '-'
     $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0094), '-'
-    if ($Value -notmatch 'Ãƒ|Ã¢') { return $Value }
+    if ($Value -notmatch 'ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢|ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢') { return $Value }
     try {
         $bytes = [Text.Encoding]::GetEncoding(1252).GetBytes($Value)
         $fixed = [Text.Encoding]::UTF8.GetString($bytes)
@@ -244,7 +244,7 @@ function Find-ArtistMbidByName {
     try {
         $encodedArtist = [Uri]::EscapeDataString(('artist:"{0}"' -f $Artist))
         $uri = 'https://musicbrainz.org/ws/2/artist/?query={0}&fmt=json&limit=1' -f $encodedArtist
-        $headers = @{ 'User-Agent' = 'JukeboxDownloadWizard/0.2.2.0 (marquee metadata lookup)' }
+        $headers = @{ 'User-Agent' = 'JukeboxDownloadWizard/0.2.2.1 (marquee metadata lookup)' }
         $response = Invoke-RestMethod -Uri $uri -Headers $headers -TimeoutSec 15
         if ($response.artists -and $response.artists.Count -gt 0 -and $response.artists[0].id) {
             return [string]$response.artists[0].id
