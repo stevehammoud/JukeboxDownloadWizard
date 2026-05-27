@@ -1,4 +1,4 @@
-﻿param(
+param(
     [string]$Artist = '',
     [string]$Title = '',
     [string]$CacheDir = '',
@@ -19,7 +19,7 @@ function Get-SafeCacheName {
 
 function Invoke-MusicBrainzJson {
     param([string]$Url)
-    $headers = @{ 'User-Agent' = 'JukeboxDownloadWizard/0.2.1.2 ( https://musicbrainz.org/ )' }
+    $headers = @{ 'User-Agent' = 'JukeboxDownloadWizard/0.2.2.0 ( https://musicbrainz.org/ )' }
     return Invoke-RestMethod -Uri $Url -Headers $headers -TimeoutSec 12
 }
 
@@ -130,5 +130,3 @@ catch {
 }
 
 Set-Content -LiteralPath $missPath -Value ((Get-Date).ToString('s')) -Encoding ASCII
-
-

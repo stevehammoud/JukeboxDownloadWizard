@@ -1,4 +1,4 @@
-﻿param(
+param(
     [string]$Artist = '',
     [string]$Title = '',
     [string]$CacheDir = ''
@@ -32,7 +32,7 @@ function Repair-TextEncoding {
     $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0092), '-'
     $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0093), '-'
     $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0094), '-'
-    if ($Value -notmatch 'Ãƒ|Ã¢') { return $Value }
+    if ($Value -notmatch 'ÃƒÆ’|ÃƒÂ¢') { return $Value }
     try {
         $bytes = [Text.Encoding]::GetEncoding(1252).GetBytes($Value)
         $fixed = [Text.Encoding]::UTF8.GetString($bytes)
@@ -439,7 +439,7 @@ if (Test-Path -LiteralPath $cachePath) {
 }
 if (Test-Path -LiteralPath $missPath) { return }
 
-$headers = @{ 'User-Agent' = 'JukeboxDownloadWizard/0.2.1.2 ( https://musicbrainz.org/ )' }
+$headers = @{ 'User-Agent' = 'JukeboxDownloadWizard/0.2.2.0 ( https://musicbrainz.org/ )' }
 
 try {
     $recording = Find-Recording -ArtistValue $Artist -TitleValue $Title -Headers $headers
@@ -454,4 +454,3 @@ catch {
 }
 
 Set-Content -LiteralPath $missPath -Value ((Get-Date).ToString('s')) -Encoding ASCII
-

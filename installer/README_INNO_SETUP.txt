@@ -1,6 +1,6 @@
-﻿Jukebox Download Wizard Inno Setup Build Notes
+Jukebox Download Wizard Inno Setup Build Notes
 
-Version: 0.2.0.0
+Version: 0.2.2.0
 
 Purpose:
 
@@ -37,4 +37,3 @@ Notes:
 - The installer requires admin permission because it installs into Program Files.
 - Uninstall removes the app install folder, including resources, visible downloads, logs, and cache.
 - The app still hides .jukebox_download_wizard on launch as an extra safeguard.
-

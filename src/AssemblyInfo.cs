@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using System.Runtime.InteropServices;
 
 [assembly: AssemblyTitle("Jukebox Download Wizard")]
@@ -6,9 +6,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyCompany("Steve Hammoud")]
 [assembly: AssemblyProduct("Jukebox Download Wizard")]
 [assembly: AssemblyCopyright("Copyright Steve Hammoud")]
-[assembly: AssemblyInformationalVersion("0.2.1.2")]
+[assembly: AssemblyInformationalVersion("0.2.2.0")]
 [assembly: ComVisible(false)]
-[assembly: AssemblyVersion("0.2.1.2")]
-[assembly: AssemblyFileVersion("0.2.1.2")]
-
-
+[assembly: AssemblyVersion("0.2.2.0")]
+[assembly: AssemblyFileVersion("0.2.2.0")]

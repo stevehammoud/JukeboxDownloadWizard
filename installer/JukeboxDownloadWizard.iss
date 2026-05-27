@@ -1,6 +1,6 @@
-﻿#define MyAppName "Jukebox Download Wizard"
+#define MyAppName "Jukebox Download Wizard"
 #define MyAppId "B8F37529-4779-4554-9B74-E5153AE71362"
-#define MyAppVersion "0.2.1.2"
+#define MyAppVersion "0.2.2.0"
 #define MyAppPublisher "Steve Hammoud"
 #define MyAppExeName "JukeboxDownloadWizard.exe"
 
@@ -554,14 +554,3 @@ begin
     end;
   end;
 end;
-
-
-
-
-
-
-
-
-
-
-

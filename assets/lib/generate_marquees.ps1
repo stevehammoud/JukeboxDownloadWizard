@@ -1,4 +1,4 @@
-﻿param(
+param(
     [Parameter(Mandatory=$true)][string]$VideoPath,
     [Parameter(Mandatory=$true)][string]$DownloadDir,
     [string]$Standard = 'false',
@@ -62,7 +62,7 @@ function Repair-TextEncoding {
     $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0092), '-'
     $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0093), '-'
     $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0094), '-'
-    if ($Value -notmatch 'Ã|â') { return $Value }
+    if ($Value -notmatch 'Ãƒ|Ã¢') { return $Value }
     try {
         $bytes = [Text.Encoding]::GetEncoding(1252).GetBytes($Value)
         $fixed = [Text.Encoding]::UTF8.GetString($bytes)
@@ -244,7 +244,7 @@ function Find-ArtistMbidByName {
     try {
         $encodedArtist = [Uri]::EscapeDataString(('artist:"{0}"' -f $Artist))
         $uri = 'https://musicbrainz.org/ws/2/artist/?query={0}&fmt=json&limit=1' -f $encodedArtist
-        $headers = @{ 'User-Agent' = 'JukeboxDownloadWizard/0.2.1.2 (marquee metadata lookup)' }
+        $headers = @{ 'User-Agent' = 'JukeboxDownloadWizard/0.2.2.0 (marquee metadata lookup)' }
         $response = Invoke-RestMethod -Uri $uri -Headers $headers -TimeoutSec 15
         if ($response.artists -and $response.artists.Count -gt 0 -and $response.artists[0].id) {
             return [string]$response.artists[0].id
@@ -653,20 +653,3 @@ finally {
     if ($PrivateFonts) { $PrivateFonts.Dispose() }
     if (Test-Path -LiteralPath $tempDir) { Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

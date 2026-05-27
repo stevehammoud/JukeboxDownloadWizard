@@ -1,4 +1,4 @@
-﻿# Jukebox Download Wizard
+# Jukebox Download Wizard
 
 Windows desktop app for building YouTube video lists, downloading videos, and generating One saUCE jukebox marquee artwork.
 
@@ -147,4 +147,3 @@ installer\JukeboxDownloadWizard.iss
 ```
 
 Inno Setup is required to compile the installer.
-

@@ -1,5 +1,4 @@
 Jukebox Download Wizard
-Version: 0.2.1.2
-Date: 2026-05-26
+Version: 0.2.2.0
+Date: 2026-05-27
 Author: Steve Hammoud
-

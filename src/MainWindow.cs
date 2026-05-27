@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.ObjectModel;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -16,7 +16,7 @@ namespace JukeboxDownloadWizard
 {
     public class MainWindow : Window
     {
-        private const string AppVersion = "0.2.1.2";
+        private const string AppVersion = "0.2.2.0";
         private const string SsdFolderName = "ha8800_screensaver";
         private const string BitLcdArtworkFolder = "bitlcd\\thirdparty";
         private const long SsdMoveReserveBytes = 1024L * 1024L * 1024L;
@@ -2957,7 +2957,7 @@ namespace JukeboxDownloadWizard
                                 <ColumnDefinition Width='*'/>
                                 <ColumnDefinition Width='16'/>
                             </Grid.ColumnDefinitions>
-                            <RepeatButton Grid.Column='0' Command='ScrollBar.LineLeftCommand' Content='â€¹' Background='#0B1020' Foreground='#CBD5E1' BorderBrush='#1E293B' BorderThickness='1' Padding='0'/>
+                            <RepeatButton Grid.Column='0' Command='ScrollBar.LineLeftCommand' Content='Ã¢â‚¬Â¹' Background='#0B1020' Foreground='#CBD5E1' BorderBrush='#1E293B' BorderThickness='1' Padding='0'/>
                             <Border Grid.Column='1' Background='#111827' BorderBrush='#1E293B' BorderThickness='0,1,0,1'>
                                 <Track x:Name='PART_Track' IsDirectionReversed='False' Margin='4,0'>
                                     <Track.DecreaseRepeatButton>
@@ -2971,7 +2971,7 @@ namespace JukeboxDownloadWizard
                                     </Track.IncreaseRepeatButton>
                                 </Track>
                             </Border>
-                            <RepeatButton Grid.Column='2' Command='ScrollBar.LineRightCommand' Content='â€º' Background='#0B1020' Foreground='#CBD5E1' BorderBrush='#1E293B' BorderThickness='1' Padding='0'/>
+                            <RepeatButton Grid.Column='2' Command='ScrollBar.LineRightCommand' Content='Ã¢â‚¬Âº' Background='#0B1020' Foreground='#CBD5E1' BorderBrush='#1E293B' BorderThickness='1' Padding='0'/>
                         </Grid>
                     </ControlTemplate>
                 </Setter.Value>
@@ -3683,17 +3683,3 @@ namespace JukeboxDownloadWizard
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
