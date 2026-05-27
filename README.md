@@ -36,7 +36,7 @@ C:\Program Files (x86)\Jukebox Download Wizard\
 
 ## YouTube cookie setup
 
-This release does not include a YouTube cookie file. Users must provide their own if downloads require authentication.
+This release does not include a YouTube cookie file. Users must provide their own if downloads require authentication.  The preferred Google extension to use to export the cookie file is Cookie-Editor (https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm?pli=1).  There are many imposter extensions with a similar name which contain malware so be careful in which extension you choose.
 
 After installation, cookie instructions are installed here:
 
