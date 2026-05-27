@@ -1,4 +1,5 @@
 ﻿Version 0.2.1.2
+- Downloads and generated marquees now save to the visible app downloads folder instead of the hidden app internals folder.
 - 0.2.1.1 Bug Fixes:
   - Suppressed harmless FFmpeg H.264 frame-grab noise during marquee generation.
   - Made FFmpeg preview-frame extraction non-fatal so damaged frames do not stop
@@ -129,3 +130,4 @@ Version 0.0.1.0
 - Improved yt-dlp download console output to hide download progress noise written to log.
 - Limited log retention to five files per log folder.
 - Added Move Downloads to SSD action + file validation to avoid duplicate files.
+

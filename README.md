@@ -74,15 +74,16 @@ C:\Program Files (x86)\Jukebox Download Wizard\
   README.txt
   version.txt
   resources\
+  downloads\
   .jukebox_download_wizard\   hidden app internals
 ```
 
-The hidden `.jukebox_download_wizard` folder contains app internals, bundled tools, cache, temporary files, downloads, logs, and generated marquee artwork. Users normally do not need to edit anything in that hidden folder.
+The hidden `.jukebox_download_wizard` folder contains app internals, bundled tools, cache, temporary files, and logs. Users normally do not need to edit anything in that hidden folder.
 
 ## Downloads and generated artwork
 
-- Downloaded videos are saved in the app downloads folder.
-- Generated marquees are saved in the app downloads\marquee folder.
+- Downloaded videos are saved in the visible app downloads folder: `C:\Program Files (x86)\Jukebox Download Wizard\downloads`.
+- Generated marquees are saved in the visible app downloads\marquee folder.
 - App logs are saved in the logs folder.
 - Moving MP4s to SSD targets an existing `\ha8800_screensaver\` folder or selected subfolder.
 - Moving BitLCD artwork targets an existing `\bitlcd\thirdparty\` folder.
@@ -146,3 +147,4 @@ installer\JukeboxDownloadWizard.iss
 ```
 
 Inno Setup is required to compile the installer.
+

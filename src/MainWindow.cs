@@ -110,7 +110,7 @@ namespace JukeboxDownloadWizard
             assetsDir = Path.Combine(dataRoot, "assets");
             resourcesDir = Path.Combine(packageRoot, "resources");
             resourceCacheDir = Path.Combine(assetsDir, "resources", "cache");
-            downloadsDir = Path.Combine(dataRoot, "downloads");
+            downloadsDir = Path.Combine(packageRoot, "downloads");
             logsDir = Path.Combine(dataRoot, "logs");
             archiveLogDir = Path.Combine(logsDir, "ARCHIVE_LOGS");
             consoleLogDir = logsDir;
@@ -119,6 +119,7 @@ namespace JukeboxDownloadWizard
             backendScript = Path.Combine(assetsDir, "lib", "gui_backend.ps1");
             urlFile = Path.Combine(resourcesDir, "jukebox_urls.txt");
             HideInternalAppFolder();
+            MigrateHiddenDownloadsFolder();
             RotateArchiveLogs();
 
             Title = "Jukebox Download Wizard v" + AppVersion;
@@ -162,6 +163,35 @@ namespace JukeboxDownloadWizard
             }
             catch
             {
+            }
+        }
+
+        private void MigrateHiddenDownloadsFolder()
+        {
+            try
+            {
+                string oldDownloadsDir = Path.Combine(dataRoot, "downloads");
+                if (!Directory.Exists(oldDownloadsDir)) { return; }
+
+                Directory.CreateDirectory(downloadsDir);
+                foreach (string oldPath in Directory.GetFiles(oldDownloadsDir, "*", SearchOption.AllDirectories))
+                {
+                    string relativePath = oldPath.Substring(oldDownloadsDir.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                    string newPath = Path.Combine(downloadsDir, relativePath);
+                    string newParent = Path.GetDirectoryName(newPath);
+                    if (!String.IsNullOrWhiteSpace(newParent)) { Directory.CreateDirectory(newParent); }
+                    if (File.Exists(newPath)) { newPath = GetUniqueFilePath(newParent, Path.GetFileName(newPath)); }
+                    File.Move(oldPath, newPath);
+                }
+
+                if (Directory.GetFiles(oldDownloadsDir, "*", SearchOption.AllDirectories).Length == 0)
+                {
+                    Directory.Delete(oldDownloadsDir, true);
+                }
+            }
+            catch (Exception ex)
+            {
+                WriteOutput("Download folder migration warning: " + ex.Message);
             }
         }
 
@@ -352,7 +382,7 @@ namespace JukeboxDownloadWizard
             actions.Children.Add(moveButtons);            actions.Children.Add(Separator());
             actions.Children.Add(SectionTitle("Access Resource Paths"));
             Button openResourcesButton = Button("App Resources Directory", double.NaN, 32);
-            Button openDownloadsButton = Button("Open Downloads Directory on PC", double.NaN, 32);
+            Button openDownloadsButton = Button("Open Downloads Folder on PC", double.NaN, 32);
             Button openSsdButton = Button("Open Jukebox Directory on SSD", double.NaN, 32);
             openResourcesButton.Margin = new Thickness(0, 8, 0, 0);
             openDownloadsButton.Margin = new Thickness(0, 8, 0, 0);

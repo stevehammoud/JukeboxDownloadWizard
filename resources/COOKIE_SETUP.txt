@@ -1,4 +1,4 @@
-Jukebox Wizard GUI Cookie File Setup
+﻿Jukebox Wizard GUI Cookie File Setup
 
 Jukebox Wizard GUI downloads MP4 videos directly from YouTube in a format
 intended for playback on the ALU. Running the app requires your own YouTube
@@ -45,8 +45,7 @@ Export Cookie File steps:
     ytcookies.txt
 
 12. Replace the blank ytcookies.txt file in resources
-    Do not edit the hidden .jukebox_download_wizard folder; it is maintained
-    by the app.
+    Do not edit the hidden .jukebox_download_wizard folder; it is maintained by the app. Downloads and generated marquee artwork are stored in the visible downloads folder.
     with your exported cookie contents.
 
 The first line of the file should look like this:
@@ -54,3 +53,4 @@ The first line of the file should look like this:
 # Netscape HTTP Cookie File
 
 After the file is updated, open the app and click Validate.
+

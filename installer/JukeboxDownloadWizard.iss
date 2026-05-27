@@ -34,9 +34,9 @@ Name: "startmenuicon"; Description: "Create a Start Menu shortcut"; GroupDescrip
 
 [Dirs]
 Name: "{app}\resources"; Permissions: users-modify
+Name: "{app}\downloads"; Permissions: users-modify
+Name: "{app}\downloads\discard"; Permissions: users-modify
 Name: "{app}\.jukebox_download_wizard"; Attribs: hidden; Permissions: users-modify
-Name: "{app}\.jukebox_download_wizard\downloads"; Permissions: users-modify
-Name: "{app}\.jukebox_download_wizard\downloads\discard"; Permissions: users-modify
 Name: "{app}\.jukebox_download_wizard\logs"; Permissions: users-modify
 Name: "{app}\.jukebox_download_wizard\assets\resources"; Permissions: users-modify
 Name: "{app}\.jukebox_download_wizard\assets\resources\cache"; Permissions: users-modify

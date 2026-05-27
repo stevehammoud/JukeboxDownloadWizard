@@ -10,7 +10,7 @@ What the installer does:
 
 - Installs Jukebox Download Wizard under Program Files.
 - Hides the internal .jukebox_download_wizard folder.
-- Grants write access to the folders the app needs for resources, logs, downloads, cache, and temp files.
+- Grants write access to the folders the app needs for resources, visible downloads, logs, cache, and temp files.
 - Lets the user choose Desktop and Start Menu shortcuts.
 - Shows a cookie setup page.
 - Allows the user to paste exported cookie text.
@@ -35,5 +35,6 @@ How to install Inno Setup:
 Notes:
 
 - The installer requires admin permission because it installs into Program Files.
-- Uninstall removes the app install folder, including resources, logs, cache, and downloads.
+- Uninstall removes the app install folder, including resources, visible downloads, logs, and cache.
 - The app still hides .jukebox_download_wizard on launch as an extra safeguard.
+
