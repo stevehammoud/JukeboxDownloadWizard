@@ -18,13 +18,14 @@
 $Root = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
 $PackageRoot = Split-Path -Parent $Root
 $AppRoot = Split-Path -Parent $PackageRoot
+$VisibleRoot = if ((Split-Path -Leaf $PackageRoot) -ieq '.jukebox_download_wizard') { $AppRoot } else { $PackageRoot }
 $LibDir = Join-Path $Root 'lib'
-$ResourceDir = Join-Path $AppRoot 'resources'
+$ResourceDir = Join-Path $VisibleRoot 'resources'
 $HiddenResourceDir = Join-Path $Root 'resources'
 $ResourceCacheDir = Join-Path $HiddenResourceDir 'cache'
 $ResourceTempDir = Join-Path $HiddenResourceDir 'temp'
-$DownloadDir = Join-Path $PackageRoot 'downloads'
-$LogDir = Join-Path $PackageRoot 'logs'
+$DownloadDir = Join-Path $VisibleRoot 'downloads'
+$LogDir = Join-Path $VisibleRoot 'logs'
 $ArchiveLogDir = Join-Path $LogDir 'ARCHIVE_LOGS'
 $ToolsDir = Join-Path $Root 'tools'
 $YtDlpPortablePath = Join-Path $ToolsDir 'yt-dlp.exe'
