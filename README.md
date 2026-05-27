@@ -75,6 +75,7 @@ C:\Program Files (x86)\Jukebox Download Wizard\
   version.txt
   resources\
   downloads\
+  logs\
   .jukebox_download_wizard\   hidden app internals
 ```
 
