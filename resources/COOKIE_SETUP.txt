@@ -1,0 +1,56 @@
+Jukebox Wizard GUI Cookie File Setup
+
+Jukebox Wizard GUI downloads MP4 videos directly from YouTube in a format
+intended for playback on the ALU. Running the app requires your own YouTube
+cookie file.
+
+Do not share your cookie file. It can contain private sign-in data for your
+YouTube/Google session.
+
+The release package expects the cookie file here:
+
+resources\ytcookies.txt
+
+Export Cookie File steps:
+
+1. Download the Cookie-Editor browser extension for Google Chrome.
+
+2. Click the browser extension icon in Chrome and click the 3 dots next to
+   Cookie-Editor.
+
+3. Select Options and toggle on the setting that allows the extension to be
+   used in an Incognito browser window.
+
+4. Open a Chrome browser window in Incognito Mode.
+
+5. Go to https://www.youtube.com/ and log in with your Google ID.
+
+6. In the same tab, go to:
+
+   https://www.youtube.com/robots.txt
+
+   This should be the only tab open in Incognito Mode.
+
+7. Open the Cookie-Editor browser extension and click the 4th icon on the
+   bottom right to export the cookie file.
+
+8. Export as Netscape. This saves the export contents to your clipboard.
+
+9. Immediately close the Incognito Chrome browser window.
+
+10. Paste the clipboard contents into a text editor.
+
+11. Save the file as:
+
+    ytcookies.txt
+
+12. Replace the blank ytcookies.txt file in resources
+    Do not edit the hidden .jukebox_download_wizard folder; it is maintained
+    by the app.
+    with your exported cookie contents.
+
+The first line of the file should look like this:
+
+# Netscape HTTP Cookie File
+
+After the file is updated, open the app and click Validate.

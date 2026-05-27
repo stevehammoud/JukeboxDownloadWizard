@@ -1,0 +1,107 @@
+Jukebox Download Wizard - Third-Party Notices
+
+This application bundles command-line tools and can use online metadata/artwork
+services to download videos and generate marquee artwork. Use this application
+only with content, accounts, services, images, and API keys that you are allowed
+to use. This notice is informational and is not legal advice.
+
+Bundled tools
+-------------
+
+yt-dlp
+Website: https://github.com/yt-dlp/yt-dlp
+Purpose: Downloads video/audio content from supported websites.
+License notes: yt-dlp is released under the Unlicense/public-domain style
+license. The bundled executable may include code from other projects; review
+the yt-dlp project notices for current dependency details.
+
+FFmpeg / FFprobe
+Website: https://ffmpeg.org/
+Legal/license notes: https://ffmpeg.org/legal.html
+Purpose: Merges downloaded audio/video, extracts media details, rotates video
+when enabled, performs optional audio normalization, and helps generate artwork.
+License notes: The bundled FFmpeg build is GPL-enabled. Its build configuration
+includes --enable-gpl and GPL codec libraries such as libx264/libx265. Public
+redistribution should include FFmpeg/GPL notices and provide a clear way to
+obtain the matching FFmpeg source/build information. FFmpeg is not owned by this
+application.
+
+Deno
+Website: https://deno.com/
+License notes: https://github.com/denoland/deno/blob/main/LICENSE.md
+Purpose: JavaScript runtime used by yt-dlp for YouTube JavaScript challenge
+handling when required.
+License notes: Deno is distributed under the MIT License. Keep the copyright and
+license notice with redistributed copies.
+
+Fonts
+-----
+
+Anton
+Source/license: Bundled with its SIL Open Font License text.
+Purpose: Marquee text.
+
+Bebas Neue
+Source/license: Bundled with its SIL Open Font License file.
+Purpose: Legacy/alternate marquee text styling.
+
+Online metadata and artwork services
+------------------------------------
+
+MusicBrainz
+Website: https://musicbrainz.org/
+API docs: https://musicbrainz.org/doc/MusicBrainz_API
+Rate limiting: https://musicbrainz.org/doc/MusicBrainz_API/Rate_Limiting
+Purpose: Looks up recording title, artist credit, release title, release date,
+and MusicBrainz identifiers.
+Usage notes: Requests should use a meaningful User-Agent and should be cached
+where possible. This app caches metadata lookups to avoid unnecessary requests.
+MusicBrainz core data is CC0/public-domain style. Some supplementary data is
+Creative Commons Attribution-NonCommercial-ShareAlike.
+
+Cover Art Archive
+Website/API docs: https://musicbrainz.org/doc/Cover_Art_Archive/API
+Purpose: Looks up release cover art using MusicBrainz release identifiers.
+Usage notes: This app caches downloaded cover artwork to avoid repeated
+requests for the same release. Album covers are collected for archival access
+and remain subject to the rights of the artists, labels, and other copyright
+owners. Users are responsible for confirming they may reuse generated artwork
+that includes cover art.
+
+fanart.tv
+Website: https://fanart.tv/
+API key page: https://fanart.tv/get-an-api-key/
+Purpose: Optional artist artwork source for marquee right-side artwork using
+MusicBrainz artist identifiers.
+Usage and policy notes:
+- Public programs must inform users about fanart.tv and the images used.
+- Users should be allowed to provide their own personal API key in addition to
+  any project key used by the application.
+- Do not use fanart.tv API methods inside another API for third-party use.
+- Do not use the fanart.tv API commercially without written consent.
+- Do not make more requests than necessary. Do not bulk-download their content.
+- Use documented API methods only.
+- Keep the email address on the fanart.tv account current so fanart.tv can
+  contact the key holder if needed.
+
+Downloaded video/audio content
+------------------------------
+
+The app can use yt-dlp to download media from YouTube or other supported sites.
+Users are responsible for following the applicable service terms and copyright
+law. Download only content you own, have permission to use, or are otherwise
+legally allowed to download and reuse.
+
+Application artwork and logos
+-----------------------------
+
+Bundled Jukebox Download Wizard, One saUCE, and OnlyOne artwork/logos are
+included as application assets. Do not reuse them outside this application
+unless you own or have permission to use those assets.
+
+User data and local API keys
+----------------------------
+
+Do not share YouTube cookie files, personal API keys, logs, cache files, or
+downloaded media that may contain private account/session data or copyrighted
+content. Public release packages should ship with empty user data files only.

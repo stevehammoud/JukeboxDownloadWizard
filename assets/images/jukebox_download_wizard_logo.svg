@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="220" viewBox="0 0 900 220">
+  <rect width="900" height="220" rx="0" fill="#08111f"/>
+  <g transform="translate(42 38)">
+    <rect x="0" y="0" width="126" height="126" rx="20" fill="#12233a" stroke="#2dd4bf" stroke-width="4"/>
+    <path d="M48 34 L92 63 L48 92 Z" fill="#38bdf8"/>
+    <path d="M96 88 v26 h-66 v-26" fill="none" stroke="#f8fafc" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M63 76 v36 m0 0 l-16-16 m16 16 l16-16" fill="none" stroke="#f8fafc" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="194" y="93" fill="#f8fafc" font-family="Segoe UI, Arial, sans-serif" font-size="48" font-weight="800" letter-spacing="1">JUKEBOX</text>
+  <text x="194" y="146" fill="#38bdf8" font-family="Segoe UI, Arial, sans-serif" font-size="44" font-weight="700" letter-spacing="1">DOWNLOAD WIZARD</text>
+  <rect x="196" y="166" width="514" height="5" rx="2.5" fill="#2dd4bf"/>
+</svg>

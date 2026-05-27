@@ -1,0 +1,42 @@
+fanart.tv Personal API Key Setup
+
+Jukebox Download Wizard may use fanart.tv artwork in future marquee artwork
+features. The application includes a project API key for app-level access.
+
+You may also add your own fanart.tv Personal API Key. This is optional.
+
+Benefits of adding a personal key:
+
+1. It identifies your own fanart.tv account in addition to the app project.
+2. It may allow access to newer approved fanart.tv artwork sooner than the
+   project key alone.
+3. It gives fanart.tv a clearer distinction between application traffic and
+   your personal artwork lookups.
+4. It can be updated or removed later without reinstalling the app.
+
+How to get a personal API key:
+
+1. Create or sign into your fanart.tv account:
+
+   https://fanart.tv/
+
+2. Open the API key page:
+
+   https://fanart.tv/get-an-api-key/
+
+3. Copy your Personal API Key.
+
+4. Paste it during installation when prompted, or save it later to:
+
+   resources\fanart_personal_api_key.txt
+
+Do not share your personal API key publicly.
+
+fanart.tv usage reminders:
+
+- The app should use documented API methods only.
+- The app should avoid unnecessary requests and cache artwork locally.
+- The app should not bulk-download fanart.tv content.
+- fanart.tv API use is non-commercial unless written consent is obtained.
+- Keep the email address on your fanart.tv account current so fanart.tv can
+  contact you if needed.

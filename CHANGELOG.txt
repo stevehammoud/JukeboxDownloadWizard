@@ -1,0 +1,131 @@
+﻿Version 0.2.1.2
+- 0.2.1.1 Bug Fixes:
+  - Suppressed harmless FFmpeg H.264 frame-grab noise during marquee generation.
+  - Made FFmpeg preview-frame extraction non-fatal so damaged frames do not stop
+    marquee generation.
+  - Added retry timestamps for preview-frame extraction before falling back to
+    album/API/logo artwork.
+  - Kept video-derived artist/title text for marquees unless the artist is unknown.
+  - Preserved meaningful title parentheses such as "Dude (Looks Like a Lady)" while still 
+    removing video-tag noise.
+  - Improved cleanup of replacement-character encoding artifacts in filenames and marquee 
+    text.
+  - Added a minimum confidence check before accepting MusicBrainz matches for artwork 
+    metadata.
+  - Rejected MusicBrainz matches where the title matches but the known artist does not.
+  - Bumped marquee metadata cache version so improved MusicBrainz matching is used.
+
+--------------------------------------------------
+Version 0.2.1.1
+- Added MusicBrainz metadata lookup for marquee title, artist, and release text.
+- Shared one MusicBrainz match across marquee text, album cover lookup, and artist artwork lookup.
+- Removed trailing featured-artist wording from marquee title lookups and display.
+- Hardened search previews to require a valid MusicBrainz artist/title match.
+- Updated standard marquee detail line to show MP4 length, MusicBrainz release year, and MP4 resolution.
+- Updated album/artist artwork samples and stretched artwork panels to fill the marquee side boxes.
+- Standard marquees now save as compressed JPG files.
+- Artist artwork now falls back to individual artists when a collaboration image is not found.
+- Album art lookup now prefers official single/album/EP releases and avoids playlist-like releases.
+- Marquee frame colors now use stronger album-cover colors with a two-color foreground/background scheme.
+- Fixed Generate Missing MP4 Marquees so selected MP4s from external drives write artwork to app downloads\marquee.
+- Fixed the cancel button text while generating missing MP4 marquees.
+- Updated the search/tools layout and added a button to open generated marquee artwork on PC.
+
+--------------------------------------------------
+Version 0.2.1.0
+- Started API-based album cover lookup for marquee artwork.
+- Added local album artwork cache for repeated marquee generation.
+
+--------------------------------------------------
+Version 0.2.0.0
+- Added marquee generation.
+- Bundled Anton font and updated standard marquee text styling.
+- Standard marquees now save directly to downloads\marquee.
+- Updated marquee controls and button labels.
+- Added Move BitLCD Artwork actions which targets existing bitlcd\thirdparty folders only.
+
+--------------------------------------------------
+Version 0.1.0.1
+--------------------------------------------------
+- Fixed SSD duplicate detection so featured artists in the artist name do not collapse unrelated songs into the same match.
+- Fixed GUI progress/status updates during audio normalization so the app shows the normalization phase instead of staying on completed download status.
+
+
+--------------------------------------------------
+Version 0.1.0.0
+--------------------------------------------------
+- Added Inno Setup installer project for Program Files installation.
+- Installer supports optional Desktop and Start Menu shortcuts.
+- Installer includes a cookie setup step with instructions, paste box, validation, and empty-cookie fallback.
+- Added an installer button to open the full cookie setup instructions during the cookie setup step.
+- Installer hides the internal app folder and grants write access to user-managed resources, logs, downloads, and cache folders.
+- Installer uninstall now removes the app install folder for clean reinstall behavior.
+
+
+--------------------------------------------------
+Version 0.0.2.1
+--------------------------------------------------
+- Improved button hover readability by switching hover/pressed text to dark colors on lighter button backgrounds.
+- Improved scrollbar arrow hover readability to match the dark theme.
+
+
+--------------------------------------------------
+Version 0.0.2.0
+--------------------------------------------------
+- Added preview selection for single video URLs, playlists, channels, and keyword searches before adding videos to the list.
+- Updated the selected video list to show artist/title labels instead of raw URLs and keep entries sorted.
+- Added Update Video List window for moving videos between Keep and Remove lists.
+- Added search/import completion stats and clearer add/cancel confirmations.
+- Added disk-space checks for PC downloads and SSD moves, including per-file SSD space checks.
+- Improved duplicate handling for downloads and SSD moves.
+- Updated log handling so active logs stay in logs and older logs archive into ARCHIVE_LOGS with five retained per type.
+- Replaced single video length fields with HRS/MINS/SECS inputs that normalize overflow values.
+- Added Default Video Length reset and automatic min/max gap handling.
+- Added Stop Search to keep partial search results available for selection.
+- Added optional audio normalization after downloads.
+
+
+--------------------------------------------------
+Version 0.0.1.2
+--------------------------------------------------
+- Added download resolution selection.
+- Adjusted startup window width to better fit controls.
+- Updated layout and added a button to open detected SSD contents.
+- Merged YouTube URL and keyword search into one input.
+- Added min/max video length filters with 30-second step controls.
+- Replaced the bottom console with a separate console window.
+- Improved duplicate handling for PC downloads and SSD moves.
+- Updated the header wordmark asset.
+- Improved dark scrollbars in the main video list, selection window, and update window.
+- Moved SSD transfers to a background task so the app stays responsive.
+
+
+--------------------------------------------------
+Version 0.0.1.1
+--------------------------------------------------
+- Added bundled Deno JavaScript runtime support for yt-dlp EJS signature solving.
+- Added status and progress meter for currently running process.
+- Added Enter key support to act as button press when inside search field or number of vids.
+- Improved Move Downloads to SSD drive chooser to include drive letter, volume label, and detected path.
+- Improved URL metadata caching.
+- Added backend process-tree cleanup when app closes during running operation.
+- Improved YT search helper to launch yt-dlp directly.
+- Added Cancel button to cancel actions of Search and Download actions while in progress.
+- Minor fixes to layout appearance.
+- Moved collapsible console output from bottom to right.
+- Filter out live streams and videos over 60 minutes.
+- Show progress while moving downloads to SSD.
+
+
+--------------------------------------------------
+Version 0.0.1.0
+--------------------------------------------------
+- Converted the original batch workflow into a compiled WPF application.
+- Added bundled yt-dlp and ffmpeg support.
+- Added URL builder support for single video URLs, playlists/channels, and keyword search.
+- Added URL metadata cache to speed up repeated URL reviews.
+- Added URL review function to remove duplicate video IDs, exclude shorts, and vidoes not in 4:3 or 16:9 aspect ratio.
+- Increased downloaded filename limit to 75 characters including extension.
+- Improved yt-dlp download console output to hide download progress noise written to log.
+- Limited log retention to five files per log folder.
+- Added Move Downloads to SSD action + file validation to avoid duplicate files.
