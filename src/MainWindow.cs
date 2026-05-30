@@ -1981,6 +1981,7 @@ namespace JukeboxDownloadWizard
             Grid footer = new Grid { Margin = new Thickness(0, 10, 0, 0) };
             footer.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             footer.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            footer.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             Grid.SetRow(footer, 2);
             root.Children.Add(footer);
             DockPanel buttonRow = new DockPanel { LastChildFill = false };
@@ -2001,9 +2002,12 @@ namespace JukeboxDownloadWizard
             StackPanel rightButtons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
             DockPanel.SetDock(rightButtons, Dock.Right);
             buttonRow.Children.Add(rightButtons);
-            TextBlock buildingText = new TextBlock { Text = "Search is building the video list. You can stop the search anytime and select from the current videos shown.", Foreground = Brush("#CBD5E1"), FontSize = 13, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis };
+            TextBlock buildingText = new TextBlock { Text = "Current search found 0 video(s). Reviewed 0 candidate(s).", Foreground = Brush("#CBD5E1"), FontSize = 13, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 0) };
             Grid.SetRow(buildingText, 1);
             footer.Children.Add(buildingText);
+            TextBlock buildingHelpText = new TextBlock { Text = "Search is building the video list. You can stop the search at anytime and select videos from the current list.", Foreground = Brush("#94A3B8"), FontSize = 13, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 3, 0, 0) };
+            Grid.SetRow(buildingHelpText, 2);
+            footer.Children.Add(buildingHelpText);
             Button stopSearch = Button("Stop Search", 110, 32);
             Button ok = Button("OK", 90, 32);
             Button cancel = Button("Cancel", 90, 32);
@@ -2042,6 +2046,7 @@ namespace JukeboxDownloadWizard
                 previewStopped = true;
                 stopSearch.IsEnabled = false;
                 buildingText.Text = "Stopping search...";
+                buildingHelpText.Text = "Current reviewed videos will remain available for selection.";
                 SetOperation(operationName, "Stopping search", operationProgressBar == null ? 0 : operationProgressBar.Value);
                 WriteOutput("Stopping search. Current candidates will remain available for selection...");
                 KillActiveBackendProcessTree();
@@ -2083,7 +2088,7 @@ namespace JukeboxDownloadWizard
                     if (TryAddSearchCandidate(e.Data, candidates, grid))
                     {
                         heading.Text = "Select videos to add to the list";
-                        buildingText.Text = "Current search found " + candidates.Count.ToString() + " video(s). You can stop the search anytime and select from the current videos shown.";
+                        buildingText.Text = "Current search found " + candidates.Count.ToString() + " video(s). Reviewed " + searchedCount.ToString() + " candidate(s).";
                         return;
                     }
                     CaptureSearchStats(e.Data, ref searchedCount, ref candidateTotal);
@@ -2103,8 +2108,7 @@ namespace JukeboxDownloadWizard
                     if (handledProgress && buildingText.Visibility == Visibility.Visible)
                     {
                         int found = candidates.Count;
-                        string reviewedText = searchedCount > 0 ? " Reviewed " + searchedCount.ToString() + " candidate(s)." : "";
-                        buildingText.Text = "Current search found " + found.ToString() + " video(s)." + reviewedText + " You can stop the search anytime and select from the current videos shown.";
+                        buildingText.Text = "Current search found " + found.ToString() + " video(s). Reviewed " + searchedCount.ToString() + " candidate(s).";
                     }
                     if (!handledProgress && !e.Data.StartsWith("PREVIEW_FILE|", StringComparison.OrdinalIgnoreCase)) { WriteOutput(e.Data); }
                 }));
@@ -2128,6 +2132,7 @@ namespace JukeboxDownloadWizard
                         WriteOutput(operationName + " preview cancelled in " + FormatElapsed(elapsed));
                         SetBusy(false);
                         buildingText.Visibility = Visibility.Collapsed;
+                        buildingHelpText.Visibility = Visibility.Collapsed;
                         stopSearch.Visibility = Visibility.Collapsed;
                         return;
                     }
@@ -2146,6 +2151,7 @@ namespace JukeboxDownloadWizard
                         ShowAppInfo(stats, previewStopped ? "Search Stopped" : "Search Complete", dialog);
                     }
                     buildingText.Visibility = Visibility.Collapsed;
+                    buildingHelpText.Visibility = Visibility.Collapsed;
                     stopSearch.Visibility = Visibility.Collapsed;
                     ok.Visibility = Visibility.Visible;
                     ok.IsEnabled = candidates.Count > 0;
