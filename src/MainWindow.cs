@@ -16,7 +16,7 @@ namespace JukeboxDownloadWizard
 {
     public class MainWindow : Window
     {
-        private const string AppVersion = "0.2.2.1";
+        private const string AppVersion = "0.2.2.2";
         private const string SsdFolderName = "ha8800_screensaver";
         private const string BitLcdArtworkFolder = "bitlcd\\thirdparty";
         private const long SsdMoveReserveBytes = 1024L * 1024L * 1024L;
@@ -1972,6 +1972,7 @@ namespace JukeboxDownloadWizard
             root.Children.Add(heading);
             int searchedCount = 0;
             int candidateTotal = 0;
+            bool candidateCountNoticeShown = false;
 
             DataGrid grid = BuildSearchCandidateGrid(candidates);
             Grid.SetRow(grid, 1);
@@ -2085,6 +2086,18 @@ namespace JukeboxDownloadWizard
                         return;
                     }
                     CaptureSearchStats(e.Data, ref searchedCount, ref candidateTotal);
+                    int rawCandidateCount;
+                    if (!candidateCountNoticeShown && TryGetRawCandidateCount(e.Data, out rawCandidateCount))
+                    {
+                        candidateCountNoticeShown = true;
+                        string estimate = FormatEstimatedFilterTime(rawCandidateCount);
+                        ShowAppInfo(
+                            "Search found " + rawCandidateCount.ToString() + " possible video(s)." +
+                            "\n\nFiltering the candidates may take approximately " + estimate + "." +
+                            "\n\nYou can click Stop Search at any time to stop filtering and select from the videos reviewed so far.",
+                            "Filtering Search Candidates",
+                            dialog);
+                    }
                     bool handledProgress = HandleProgressLine(e.Data);
                     if (handledProgress && buildingText.Visibility == Visibility.Visible)
                     {
@@ -2122,14 +2135,14 @@ namespace JukeboxDownloadWizard
                     SetBusy(false);
                     if (candidateTotal == 0) { candidateTotal = searchedCount; }
                     int remaining = candidates.Count;
-                    int discarded = Math.Max(0, candidateTotal - remaining);
-                    if (!previewStopped && dialog.IsVisible)
+                    int discarded = Math.Max(0, (previewStopped ? searchedCount : candidateTotal) - remaining);
+                    if (dialog.IsVisible)
                     {
-                        string stats = "Time to complete: " + FormatElapsed(elapsed) +
-                                       "\nSearched: " + candidateTotal.ToString() +
+                        string stats = (previewStopped ? "Time elapsed: " : "Time to complete: ") + FormatElapsed(elapsed) +
+                                       "\nSearched: " + (previewStopped ? searchedCount : candidateTotal).ToString() +
                                        "\nDiscarded: " + discarded.ToString() +
                                        "\nRemaining: " + remaining.ToString();
-                        ShowAppInfo(stats, "Search Complete", dialog);
+                        ShowAppInfo(stats, previewStopped ? "Search Stopped" : "Search Complete", dialog);
                     }
                     buildingText.Visibility = Visibility.Collapsed;
                     stopSearch.Visibility = Visibility.Collapsed;
@@ -2232,6 +2245,12 @@ namespace JukeboxDownloadWizard
         private void CaptureSearchStats(string line, ref int searchedCount, ref int candidateTotal)
         {
             if (String.IsNullOrWhiteSpace(line)) { return; }
+            int rawCandidateCount;
+            if (TryGetRawCandidateCount(line, out rawCandidateCount))
+            {
+                candidateTotal = Math.Max(candidateTotal, rawCandidateCount);
+                return;
+            }
             if (line.StartsWith("PROGRESS|Reviewing URLs|", StringComparison.OrdinalIgnoreCase))
             {
                 string[] parts = line.Split('|');
@@ -2572,6 +2591,21 @@ namespace JukeboxDownloadWizard
             catch
             {
             }
+        }
+
+        private bool TryGetRawCandidateCount(string line, out int count)
+        {
+            count = 0;
+            if (String.IsNullOrWhiteSpace(line)) { return false; }
+            System.Text.RegularExpressions.Match match = System.Text.RegularExpressions.Regex.Match(line, @"^Found\s+(\d+)\s+candidate URL\(s\)\.$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            return match.Success && Int32.TryParse(match.Groups[1].Value, out count);
+        }
+
+        private string FormatEstimatedFilterTime(int candidateCount)
+        {
+            TimeSpan estimate = TimeSpan.FromSeconds(Math.Max(1, candidateCount) * 7);
+            if (estimate.TotalMinutes < 1) { return "less than 1 minute"; }
+            return Math.Ceiling(estimate.TotalMinutes).ToString() + " minute(s)";
         }
 
         private string GetUniqueFilePath(string folder, string fileName)
