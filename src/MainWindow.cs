@@ -2059,6 +2059,7 @@ namespace JukeboxDownloadWizard
             activeOperationCanCancel = true;
             MoveFocus(new TraversalRequest(FocusNavigationDirection.Next));
             SetBusy(true);
+            if (cancelButton != null) { cancelButton.Visibility = Visibility.Collapsed; }
             WriteOutput(startMessage + " " + inputValue);
             activeStopwatch = Stopwatch.StartNew();
 
