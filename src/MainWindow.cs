@@ -18,7 +18,7 @@ namespace JukeboxDownloadWizard
     {
         private const string AppVersion = "0.2.2.2";
         private const string SsdFolderName = "ha8800_screensaver";
-        private const string BitLcdArtworkFolder = "bitlcd\\thirdparty";
+        private const string BitLcdArtworkFolder = "bitlcd\\thirdparty\\OneSauce";
         private const long SsdMoveReserveBytes = 1024L * 1024L * 1024L;
         private const int DefaultMinDurationSeconds = 180;
         private const int DefaultMaxDurationSeconds = 600;
@@ -1124,8 +1124,17 @@ namespace JukeboxDownloadWizard
                 return;
             }
 
-            string target = roots.Count == 1 ? roots[0].Path : ChooseBitLcdRoot(roots);
+            string root = roots.Count == 1 ? roots[0].Path : ChooseBitLcdRoot(roots);
+            if (String.IsNullOrWhiteSpace(root)) { return; }
+
+            string target = ChooseDestinationFolder(root, "Choose BitLCD Artwork Folder", "Choose the OneSauce folder or a folder inside it.");
             if (String.IsNullOrWhiteSpace(target)) { return; }
+
+            if (!IsPathInsideFolder(target, root))
+            {
+                ShowAppInfo("Choose the OneSauce folder or a folder inside it.", "Move BitLCD Artwork");
+                return;
+            }
 
             MessageBoxResult answer = ShowAppDialog("Move all marquee artwork to this BitLCD folder?\n\n" + target, "Confirm Move BitLCD Artwork", MessageBoxButton.YesNo);
             if (answer == MessageBoxResult.Yes)
@@ -1644,7 +1653,7 @@ namespace JukeboxDownloadWizard
 
         private string ChooseBitLcdRoot(List<SsdTarget> roots)
         {
-            return ChooseRootFromTargets(roots, "Choose BitLCD Artwork Drive", "More than one bitlcd\\thirdparty folder was found. Choose the drive to use.");
+            return ChooseRootFromTargets(roots, "Choose BitLCD Artwork Drive", "More than one bitlcd\\thirdparty\\OneSauce folder was found. Choose the drive to use.");
         }
         private string ChooseSsdRoot(List<SsdTarget> roots)
         {
@@ -1731,10 +1740,15 @@ namespace JukeboxDownloadWizard
 
         private string ChooseSsdFolder(string startPath)
         {
+            return ChooseDestinationFolder(startPath, "Choose Destination Folder", "Choose " + SsdFolderName + " or a folder inside it.");
+        }
+
+        private string ChooseDestinationFolder(string startPath, string title, string message)
+        {
             List<string> destinations = GetDestinationFolders(startPath);
             Window dialog = new Window
             {
-                Title = "Choose Destination Folder",
+                Title = title,
                 Owner = this,
                 Width = 640,
                 Height = 360,
@@ -1750,7 +1764,7 @@ namespace JukeboxDownloadWizard
             rootGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             dialog.Content = rootGrid;
 
-            rootGrid.Children.Add(new TextBlock { Text = "Choose " + SsdFolderName + " or a folder inside it. Found " + destinations.Count + " folder(s) under " + startPath + ".", Foreground = Brush("#E5E7EB"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 10) });
+            rootGrid.Children.Add(new TextBlock { Text = message + " Found " + destinations.Count + " folder(s) under " + startPath + ".", Foreground = Brush("#E5E7EB"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 10) });
 
             ListBox list = new ListBox { Background = Brush("#0F172A"), Foreground = Brush("#E5E7EB"), BorderBrush = Brush("#334155"), FontFamily = new FontFamily("Consolas"), FontSize = 13 };
             foreach (string candidate in destinations)
