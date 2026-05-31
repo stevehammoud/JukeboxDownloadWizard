@@ -243,7 +243,7 @@ function Find-ArtistMbidByName {
     try {
         $encodedArtist = [Uri]::EscapeDataString(('artist:"{0}"' -f $Artist))
         $uri = 'https://musicbrainz.org/ws/2/artist/?query={0}&fmt=json&limit=1' -f $encodedArtist
-        $headers = @{ 'User-Agent' = 'JukeboxDownloadWizard/0.2.2.1 (marquee metadata lookup)' }
+        $headers = @{ 'User-Agent' = 'JukeboxDownloadWizard/0.2.2.2 (marquee metadata lookup)' }
         $response = Invoke-RestMethod -Uri $uri -Headers $headers -TimeoutSec 15
         if ($response.artists -and $response.artists.Count -gt 0 -and $response.artists[0].id) {
             return [string]$response.artists[0].id
@@ -608,7 +608,7 @@ try {
             Draw-CenteredText $g $parts['Artist'] (New-Object Drawing.RectangleF 540, 145, 840, 68) 'Anton' 58 $black $softShadow $false
             $bottomText = 'LENGTH: {0}  |  RELEASE DATE: {1}  |  RESOLUTION: {2}' -f $videoStats['Length'], $parts['ReleaseYear'], $videoStats['Resolution']
             Draw-CenteredText $g $bottomText (New-Object Drawing.RectangleF 430, 238, 1060, 94) 'Anton' 52 $black $softShadow $false
-            Save-JpegUnderLimit $bmp (Join-Path $marqueeRoot ($baseName + '.jpg')) 200000
+            Save-JpegUnderLimit $bmp (Join-Path $marqueeRoot ($baseName + ' (JUKE).jpg')) 200000
         }
         finally { $g.Dispose(); $bmp.Dispose() }
     }
@@ -641,7 +641,7 @@ try {
             Draw-CenteredText $g $parts['Title'] (New-Object Drawing.RectangleF 360, 145, 1200, 105) 'Arial Narrow' 64 $textColor ([Drawing.Color]::Black) $true
             $year = (Get-Date).Year.ToString()
             Draw-CenteredText $g $year (New-Object Drawing.RectangleF 1325, 242, 220, 46) 'Consolas' 40 (Mix-Color -A $paletteLight -B ([Drawing.Color]::White) -Amount 0.3) ([Drawing.Color]::Black) $false
-            Save-JpegUnderLimit $bmp (Join-Path $marqueeRoot ($baseName + '.jpg')) 200000
+            Save-JpegUnderLimit $bmp (Join-Path $marqueeRoot ($baseName + ' (JUKE).jpg')) 200000
         }
         finally { $g.Dispose(); $bmp.Dispose() }
     }

@@ -16,9 +16,9 @@ namespace JukeboxDownloadWizard
 {
     public class MainWindow : Window
     {
-        private const string AppVersion = "0.2.2.1";
+        private const string AppVersion = "0.2.2.2";
         private const string SsdFolderName = "ha8800_screensaver";
-        private const string BitLcdArtworkFolder = "bitlcd\\thirdparty";
+        private const string BitLcdArtworkFolder = "bitlcd\\thirdparty\\OneSauce";
         private const long SsdMoveReserveBytes = 1024L * 1024L * 1024L;
         private const int DefaultMinDurationSeconds = 180;
         private const int DefaultMaxDurationSeconds = 600;
@@ -1124,8 +1124,17 @@ namespace JukeboxDownloadWizard
                 return;
             }
 
-            string target = roots.Count == 1 ? roots[0].Path : ChooseBitLcdRoot(roots);
+            string root = roots.Count == 1 ? roots[0].Path : ChooseBitLcdRoot(roots);
+            if (String.IsNullOrWhiteSpace(root)) { return; }
+
+            string target = ChooseDestinationFolder(root, "Choose BitLCD Artwork Folder", "Choose the OneSauce folder or a folder inside it.");
             if (String.IsNullOrWhiteSpace(target)) { return; }
+
+            if (!IsPathInsideFolder(target, root))
+            {
+                ShowAppInfo("Choose the OneSauce folder or a folder inside it.", "Move BitLCD Artwork");
+                return;
+            }
 
             MessageBoxResult answer = ShowAppDialog("Move all marquee artwork to this BitLCD folder?\n\n" + target, "Confirm Move BitLCD Artwork", MessageBoxButton.YesNo);
             if (answer == MessageBoxResult.Yes)
@@ -1644,7 +1653,7 @@ namespace JukeboxDownloadWizard
 
         private string ChooseBitLcdRoot(List<SsdTarget> roots)
         {
-            return ChooseRootFromTargets(roots, "Choose BitLCD Artwork Drive", "More than one bitlcd\\thirdparty folder was found. Choose the drive to use.");
+            return ChooseRootFromTargets(roots, "Choose BitLCD Artwork Drive", "More than one bitlcd\\thirdparty\\OneSauce folder was found. Choose the drive to use.");
         }
         private string ChooseSsdRoot(List<SsdTarget> roots)
         {
@@ -1731,10 +1740,15 @@ namespace JukeboxDownloadWizard
 
         private string ChooseSsdFolder(string startPath)
         {
+            return ChooseDestinationFolder(startPath, "Choose Destination Folder", "Choose " + SsdFolderName + " or a folder inside it.");
+        }
+
+        private string ChooseDestinationFolder(string startPath, string title, string message)
+        {
             List<string> destinations = GetDestinationFolders(startPath);
             Window dialog = new Window
             {
-                Title = "Choose Destination Folder",
+                Title = title,
                 Owner = this,
                 Width = 640,
                 Height = 360,
@@ -1750,7 +1764,7 @@ namespace JukeboxDownloadWizard
             rootGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             dialog.Content = rootGrid;
 
-            rootGrid.Children.Add(new TextBlock { Text = "Choose " + SsdFolderName + " or a folder inside it. Found " + destinations.Count + " folder(s) under " + startPath + ".", Foreground = Brush("#E5E7EB"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 10) });
+            rootGrid.Children.Add(new TextBlock { Text = message + " Found " + destinations.Count + " folder(s) under " + startPath + ".", Foreground = Brush("#E5E7EB"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 10) });
 
             ListBox list = new ListBox { Background = Brush("#0F172A"), Foreground = Brush("#E5E7EB"), BorderBrush = Brush("#334155"), FontFamily = new FontFamily("Consolas"), FontSize = 13 };
             foreach (string candidate in destinations)
@@ -1972,12 +1986,14 @@ namespace JukeboxDownloadWizard
             root.Children.Add(heading);
             int searchedCount = 0;
             int candidateTotal = 0;
+            bool candidateCountNoticeShown = false;
 
             DataGrid grid = BuildSearchCandidateGrid(candidates);
             Grid.SetRow(grid, 1);
             root.Children.Add(grid);
 
             Grid footer = new Grid { Margin = new Thickness(0, 10, 0, 0) };
+            footer.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             footer.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             footer.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             Grid.SetRow(footer, 2);
@@ -2000,9 +2016,12 @@ namespace JukeboxDownloadWizard
             StackPanel rightButtons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
             DockPanel.SetDock(rightButtons, Dock.Right);
             buttonRow.Children.Add(rightButtons);
-            TextBlock buildingText = new TextBlock { Text = "Search is building the video list. You can stop the search anytime and select from the current videos shown.", Foreground = Brush("#CBD5E1"), FontSize = 13, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis };
+            TextBlock buildingText = new TextBlock { Text = "Current search found 0 video(s). Reviewed 0 candidate(s).", Foreground = Brush("#CBD5E1"), FontSize = 13, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 0) };
             Grid.SetRow(buildingText, 1);
             footer.Children.Add(buildingText);
+            TextBlock buildingHelpText = new TextBlock { Text = "Search is building the video list. You can stop the search at anytime and select videos from the current list.", Foreground = Brush("#94A3B8"), FontSize = 13, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 3, 0, 0) };
+            Grid.SetRow(buildingHelpText, 2);
+            footer.Children.Add(buildingHelpText);
             Button stopSearch = Button("Stop Search", 110, 32);
             Button ok = Button("OK", 90, 32);
             Button cancel = Button("Cancel", 90, 32);
@@ -2041,6 +2060,7 @@ namespace JukeboxDownloadWizard
                 previewStopped = true;
                 stopSearch.IsEnabled = false;
                 buildingText.Text = "Stopping search...";
+                buildingHelpText.Text = "Current reviewed videos will remain available for selection.";
                 SetOperation(operationName, "Stopping search", operationProgressBar == null ? 0 : operationProgressBar.Value);
                 WriteOutput("Stopping search. Current candidates will remain available for selection...");
                 KillActiveBackendProcessTree();
@@ -2058,6 +2078,7 @@ namespace JukeboxDownloadWizard
             activeOperationCanCancel = true;
             MoveFocus(new TraversalRequest(FocusNavigationDirection.Next));
             SetBusy(true);
+            if (cancelButton != null) { cancelButton.Visibility = Visibility.Collapsed; }
             WriteOutput(startMessage + " " + inputValue);
             activeStopwatch = Stopwatch.StartNew();
 
@@ -2081,16 +2102,27 @@ namespace JukeboxDownloadWizard
                     if (TryAddSearchCandidate(e.Data, candidates, grid))
                     {
                         heading.Text = "Select videos to add to the list";
-                        buildingText.Text = "Current search found " + candidates.Count.ToString() + " video(s). You can stop the search anytime and select from the current videos shown.";
+                        buildingText.Text = "Current search found " + candidates.Count.ToString() + " video(s). Reviewed " + searchedCount.ToString() + " candidate(s).";
                         return;
                     }
                     CaptureSearchStats(e.Data, ref searchedCount, ref candidateTotal);
+                    int rawCandidateCount;
+                    if (!candidateCountNoticeShown && TryGetRawCandidateCount(e.Data, out rawCandidateCount))
+                    {
+                        candidateCountNoticeShown = true;
+                        string estimate = FormatEstimatedFilterTime(rawCandidateCount);
+                        ShowAppInfo(
+                            "Search found " + rawCandidateCount.ToString() + " possible video(s)." +
+                            "\n\nFiltering the candidates may take approximately " + estimate + "." +
+                            "\n\nYou can click Stop Search at any time to stop filtering and select from the videos reviewed so far.",
+                            "Filtering Search Candidates",
+                            dialog);
+                    }
                     bool handledProgress = HandleProgressLine(e.Data);
                     if (handledProgress && buildingText.Visibility == Visibility.Visible)
                     {
                         int found = candidates.Count;
-                        string reviewedText = searchedCount > 0 ? " Reviewed " + searchedCount.ToString() + " candidate(s)." : "";
-                        buildingText.Text = "Current search found " + found.ToString() + " video(s)." + reviewedText + " You can stop the search anytime and select from the current videos shown.";
+                        buildingText.Text = "Current search found " + found.ToString() + " video(s). Reviewed " + searchedCount.ToString() + " candidate(s).";
                     }
                     if (!handledProgress && !e.Data.StartsWith("PREVIEW_FILE|", StringComparison.OrdinalIgnoreCase)) { WriteOutput(e.Data); }
                 }));
@@ -2114,6 +2146,7 @@ namespace JukeboxDownloadWizard
                         WriteOutput(operationName + " preview cancelled in " + FormatElapsed(elapsed));
                         SetBusy(false);
                         buildingText.Visibility = Visibility.Collapsed;
+                        buildingHelpText.Visibility = Visibility.Collapsed;
                         stopSearch.Visibility = Visibility.Collapsed;
                         return;
                     }
@@ -2122,16 +2155,17 @@ namespace JukeboxDownloadWizard
                     SetBusy(false);
                     if (candidateTotal == 0) { candidateTotal = searchedCount; }
                     int remaining = candidates.Count;
-                    int discarded = Math.Max(0, candidateTotal - remaining);
-                    if (!previewStopped && dialog.IsVisible)
+                    int discarded = Math.Max(0, (previewStopped ? searchedCount : candidateTotal) - remaining);
+                    if (dialog.IsVisible)
                     {
-                        string stats = "Time to complete: " + FormatElapsed(elapsed) +
-                                       "\nSearched: " + candidateTotal.ToString() +
+                        string stats = (previewStopped ? "Time elapsed: " : "Time to complete: ") + FormatElapsed(elapsed) +
+                                       "\nSearched: " + (previewStopped ? searchedCount : candidateTotal).ToString() +
                                        "\nDiscarded: " + discarded.ToString() +
                                        "\nRemaining: " + remaining.ToString();
-                        ShowAppInfo(stats, "Search Complete", dialog);
+                        ShowAppInfo(stats, previewStopped ? "Search Stopped" : "Search Complete", dialog);
                     }
                     buildingText.Visibility = Visibility.Collapsed;
+                    buildingHelpText.Visibility = Visibility.Collapsed;
                     stopSearch.Visibility = Visibility.Collapsed;
                     ok.Visibility = Visibility.Visible;
                     ok.IsEnabled = candidates.Count > 0;
@@ -2232,6 +2266,12 @@ namespace JukeboxDownloadWizard
         private void CaptureSearchStats(string line, ref int searchedCount, ref int candidateTotal)
         {
             if (String.IsNullOrWhiteSpace(line)) { return; }
+            int rawCandidateCount;
+            if (TryGetRawCandidateCount(line, out rawCandidateCount))
+            {
+                candidateTotal = Math.Max(candidateTotal, rawCandidateCount);
+                return;
+            }
             if (line.StartsWith("PROGRESS|Reviewing URLs|", StringComparison.OrdinalIgnoreCase))
             {
                 string[] parts = line.Split('|');
@@ -2572,6 +2612,21 @@ namespace JukeboxDownloadWizard
             catch
             {
             }
+        }
+
+        private bool TryGetRawCandidateCount(string line, out int count)
+        {
+            count = 0;
+            if (String.IsNullOrWhiteSpace(line)) { return false; }
+            System.Text.RegularExpressions.Match match = System.Text.RegularExpressions.Regex.Match(line, @"^Found\s+(\d+)\s+candidate URL\(s\)\.$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            return match.Success && Int32.TryParse(match.Groups[1].Value, out count);
+        }
+
+        private string FormatEstimatedFilterTime(int candidateCount)
+        {
+            TimeSpan estimate = TimeSpan.FromSeconds(Math.Max(1, candidateCount) * 7);
+            if (estimate.TotalMinutes < 1) { return "less than 1 minute"; }
+            return Math.Ceiling(estimate.TotalMinutes).ToString() + " minute(s)";
         }
 
         private string GetUniqueFilePath(string folder, string fileName)

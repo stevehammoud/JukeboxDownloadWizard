@@ -1,4 +1,10 @@
-﻿Version 0.2.1.2
+Version 0.2.2.2
+- Improved Stop Search feedback and kept reviewed videos available for selection.
+- Added the required " (JUKE)" suffix to generated BitLCD marquee JPG filenames.
+- Updated BitLCD artwork transfers to detect bitlcd\thirdparty\OneSauce and allow selection of nested destination folders.
+
+--------------------------------------------------
+Version 0.2.1.2
 - Downloads and generated marquees now save to the visible app downloads folder instead of the hidden app internals folder.
 - 0.2.1.1 Bug Fixes:
   - Suppressed harmless FFmpeg H.264 frame-grab noise during marquee generation.

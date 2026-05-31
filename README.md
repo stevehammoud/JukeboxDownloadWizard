@@ -87,7 +87,7 @@ The hidden `.jukebox_download_wizard` folder contains app internals, bundled too
 - Generated marquees are saved in the visible app downloads\marquee folder.
 - App logs are saved in the logs folder.
 - Moving MP4s to SSD targets an existing `\ha8800_screensaver\` folder or selected subfolder.
-- Moving BitLCD artwork targets an existing `\bitlcd\thirdparty\` folder.
+- Moving BitLCD artwork targets an existing `\bitlcd\thirdparty\OneSauce\` folder or a selected folder inside it.
 - Generate Missing MP4 Marquees can create marquee artwork for selected MP4 files from another local, USB, or SSD directory.
 
 ## Third-party notices
