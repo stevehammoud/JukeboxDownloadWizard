@@ -86,7 +86,7 @@ The hidden `.jukebox_download_wizard` folder contains app internals, bundled too
 - The Download button opens prompts for MP4 video or MP3 audio, then asks whether to generate standard marquee artwork.
 - MP4 video downloads support 480p, 720p, or 1080p format selection and optional audio normalization.
 - MP3 audio downloads use the best available audio and can still generate standard marquee artwork.
-- The Create MP3s from MP4s tool converts selected MP4 files from local, USB, or SSD folders into MP3 files beside the source videos.
+- The Create MP3s from MP4s tool converts selected MP4 files from local, USB, or SSD folders into MP3 files in the app downloads folder.
 - Downloaded videos are saved in the visible app downloads folder: `C:\Program Files (x86)\Jukebox Download Wizard\downloads`.
 - Generated marquees are saved in the visible app downloads\marquee folder.
 - App logs are saved in the logs folder.

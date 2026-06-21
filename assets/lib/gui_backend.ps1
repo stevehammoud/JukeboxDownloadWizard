@@ -803,8 +803,7 @@ function Convert-Mp4ToMp3ForList {
     foreach ($file in $files) {
         $index++
         $name = [IO.Path]::GetFileNameWithoutExtension($file)
-        $folder = Split-Path -Parent $file
-        $target = Get-UniqueSiblingPath -Path (Join-Path $folder ($name + '.mp3'))
+        $target = Get-UniqueDestinationPath -Folder $DownloadDir -FileName ($name + '.mp3')
         Write-Host ("PROGRESS|Converting MP4s to MP3|{0}|{1}|{2}" -f $index, $files.Count, $name)
         Write-Host "Converting to MP3: $([IO.Path]::GetFileName($file))"
         & ffmpeg -hide_banner -y -i $file -vn -codec:a libmp3lame -q:a 0 $target 2>&1 | Tee-Object -FilePath $DownloadLog -Append | Out-Null
@@ -812,7 +811,7 @@ function Convert-Mp4ToMp3ForList {
         $converted++
         Write-Host "Created MP3: $target"
     }
-    Write-Host "Finished converting $converted MP4 file(s) to MP3."
+    Write-Host "Finished converting $converted MP4 file(s) to MP3. Output: $DownloadDir"
 }
 
 function Move-DownloadsToSsd {

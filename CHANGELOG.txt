@@ -1,3 +1,8 @@
+Version 0.2.3.2
+- Fixed Create MP3s from MP4s so converted MP3 files save to the app downloads folder instead of the source MP4 folder.
+
+--------------------------------------------------
+
 Version 0.2.3.1
 - Refreshed the bundled yt-dlp executable to 2026.06.09 to avoid the older-than-90-days warning.
 
