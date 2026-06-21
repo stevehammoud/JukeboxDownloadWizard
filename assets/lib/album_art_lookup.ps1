@@ -19,7 +19,7 @@ function Get-SafeCacheName {
 
 function Invoke-MusicBrainzJson {
     param([string]$Url)
-    $headers = @{ 'User-Agent' = 'JukeboxDownloadWizard/0.2.2.2 ( https://musicbrainz.org/ )' }
+    $headers = @{ 'User-Agent' = 'JukeboxDownloadWizard/0.2.3.0 ( https://musicbrainz.org/ )' }
     return Invoke-RestMethod -Uri $Url -Headers $headers -TimeoutSec 12
 }
 

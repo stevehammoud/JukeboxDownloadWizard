@@ -1,6 +1,6 @@
-﻿param(
+param(
     [Parameter(Mandatory=$true)]
-    [ValidateSet('AddVideo', 'VideoPreview', 'ImportSource', 'SourceCount', 'SourcePreview', 'Search', 'SearchPreview', 'Review', 'Clear', 'Validate', 'Download', 'GenerateMarquees', 'MoveToSsd', 'RollbackCancel')]
+    [ValidateSet('AddVideo', 'VideoPreview', 'ImportSource', 'SourceCount', 'SourcePreview', 'Search', 'SearchPreview', 'Review', 'Clear', 'Validate', 'Download', 'GenerateMarquees', 'ConvertMp4ToMp3', 'MoveToSsd', 'RollbackCancel')]
     [string]$Action,
     [string]$Value = '',
     [int]$Limit = 25,
@@ -10,6 +10,8 @@
     [int]$MaxSeconds = -1,
     [ValidateSet(480, 720, 1080)]
     [int]$Resolution = 720,
+    [ValidateSet('Video', 'Audio')]
+    [string]$DownloadMediaType = 'Video',
     [string]$NormalizeAudio = 'false',
     [string]$GenerateStandardMarquee = 'false',
     [string]$GenerateFullColorMarquee = 'false'
@@ -49,6 +51,7 @@ if ($MinDurationSeconds -gt $MaxDurationSeconds) { $MinDurationSeconds = $MaxDur
 $FileNameTotalLimit = 75
 $Processes = 4
 $Height = $Resolution
+$DownloadAudioOnly = $DownloadMediaType -eq 'Audio'
 $NormalizeAudioEnabled = $NormalizeAudio -match '^(1|true|yes|on)$'
 $GenerateStandardMarqueeEnabled = $GenerateStandardMarquee -match '^(1|true|yes|on)$'
 $GenerateFullColorMarqueeEnabled = $GenerateFullColorMarquee -match '^(1|true|yes|on)$'
@@ -585,14 +588,16 @@ function Download-Videos {
     $success = 0
     $failed = 0
     $total = 0
-    $format = "bestvideo[vcodec*=$VideoCodec][height<=$Height]+bestaudio[ext=$AudioExt]/best[ext=$VideoExt][height<=$Height]"
+    $format = if ($DownloadAudioOnly) { 'bestaudio/best' } else { "bestvideo[vcodec*=$VideoCodec][height<=$Height]+bestaudio[ext=$AudioExt]/best[ext=$VideoExt][height<=$Height]" }
     $outputControl = '%(title).70s.%(ext)s'
+    $mediaLabel = if ($DownloadAudioOnly) { 'audio' } else { 'videos' }
+    $newFileExtension = if ($DownloadAudioOnly) { '.mp3' } else { '.mp4' }
     Write-Host "Download log: $DownloadLog"
 
     foreach ($url in $urls) {
         $total++
         Assert-MinFreeSpace -Path $DownloadDir -RequiredReserveBytes $DownloadDriveReserveBytes -Purpose 'PC downloads'
-        Write-Host ("PROGRESS|Downloading videos|{0}|{1}|Starting download" -f $total, $urls.Count)
+        Write-Host ("PROGRESS|Downloading $mediaLabel|{0}|{1}|Starting download" -f $total, $urls.Count)
         $beforeThisDownload = Get-DownloadFileSnapshot
         $ejsArgs = Get-YtDlpEjsArgs
         $title = (& yt-dlp @ejsArgs --no-warnings --get-title --cookies $CookieFile $url 2>> $DownloadLog | Select-Object -First 1)
@@ -606,8 +611,14 @@ function Download-Videos {
             '--socket-timeout', '60',
             '--retries', '10',
             '--fragment-retries', '10',
-            '-f', $format,
-            '--merge-output-format', $VideoExt,
+            '-f', $format
+        )
+        if ($DownloadAudioOnly) {
+            $args += @('-x', '--audio-format', 'mp3', '--audio-quality', '0')
+        } else {
+            $args += @('--merge-output-format', $VideoExt)
+        }
+        $args += @(
             '--cookies', $CookieFile,
             '-P', $DownloadDir,
             '-o', $outputControl,
@@ -622,8 +633,8 @@ function Download-Videos {
             & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $LibDir 'cleanup_filenames.ps1') -DownloadDir $DownloadDir -TotalLimit $FileNameTotalLimit 2>&1 | Tee-Object -FilePath $DownloadLog -Append
             $cleanupExitCode = $LASTEXITCODE
             if ($cleanupExitCode -eq 0) {
-                $newFiles = @(Get-NewDownloadFiles -Before $beforeThisDownload | Where-Object { $_.Extension -ieq '.mp4' })
-                if ($NormalizeAudioEnabled) {
+                $newFiles = @(Get-NewDownloadFiles -Before $beforeThisDownload | Where-Object { $_.Extension -ieq $newFileExtension })
+                if ($NormalizeAudioEnabled -and -not $DownloadAudioOnly) {
                     foreach ($file in $newFiles) {
                         Invoke-AudioNormalization -Path $file.FullName | Out-Null
                     }
@@ -764,6 +775,46 @@ function Generate-MarqueesForList {
     }
     Write-Host "Finished generating marquee artwork for $($files.Count) file(s). Output: $(Join-Path $DownloadDir 'marquee')"
 }
+function Get-UniqueSiblingPath {
+    param([string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) { return $Path }
+    $folder = Split-Path -Parent $Path
+    $base = [System.IO.Path]::GetFileNameWithoutExtension($Path)
+    $ext = [System.IO.Path]::GetExtension($Path)
+    $n = 1
+    do {
+        $candidate = Join-Path $folder ("{0} ({1}){2}" -f $base, $n, $ext)
+        $n++
+    } while (Test-Path -LiteralPath $candidate)
+    return $candidate
+}
+
+function Convert-Mp4ToMp3ForList {
+    param([string]$ListFile)
+
+    Ensure-Tool 'ffmpeg'
+    if (-not (Test-Path -LiteralPath $ListFile)) { throw "Selected MP4 list was not found: $ListFile" }
+    $files = @(Get-Content -LiteralPath $ListFile | ForEach-Object { $_.Trim() } | Where-Object { $_ -and (Test-Path -LiteralPath $_) -and ([IO.Path]::GetExtension($_) -ieq '.mp4') })
+    if ($files.Count -eq 0) { throw 'No MP4 files were selected for MP3 conversion.' }
+
+    $index = 0
+    $converted = 0
+    foreach ($file in $files) {
+        $index++
+        $name = [IO.Path]::GetFileNameWithoutExtension($file)
+        $folder = Split-Path -Parent $file
+        $target = Get-UniqueSiblingPath -Path (Join-Path $folder ($name + '.mp3'))
+        Write-Host ("PROGRESS|Converting MP4s to MP3|{0}|{1}|{2}" -f $index, $files.Count, $name)
+        Write-Host "Converting to MP3: $([IO.Path]::GetFileName($file))"
+        & ffmpeg -hide_banner -y -i $file -vn -codec:a libmp3lame -q:a 0 $target 2>&1 | Tee-Object -FilePath $DownloadLog -Append | Out-Null
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $target)) { throw "MP3 conversion failed for $([IO.Path]::GetFileName($file))." }
+        $converted++
+        Write-Host "Created MP3: $target"
+    }
+    Write-Host "Finished converting $converted MP4 file(s) to MP3."
+}
+
 function Move-DownloadsToSsd {
     param([string]$TargetPath = '')
 
@@ -823,6 +874,7 @@ try {
         'Validate' { Validate-Setup }
         'Download' { Download-Videos }
         'GenerateMarquees' { Generate-MarqueesForList -ListFile $Value }
+        'ConvertMp4ToMp3' { Convert-Mp4ToMp3ForList -ListFile $Value }
         'MoveToSsd' { Move-DownloadsToSsd -TargetPath $Value }
         'RollbackCancel' {
             Restore-CancelSnapshot

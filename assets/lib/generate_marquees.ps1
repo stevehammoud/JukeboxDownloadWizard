@@ -243,7 +243,7 @@ function Find-ArtistMbidByName {
     try {
         $encodedArtist = [Uri]::EscapeDataString(('artist:"{0}"' -f $Artist))
         $uri = 'https://musicbrainz.org/ws/2/artist/?query={0}&fmt=json&limit=1' -f $encodedArtist
-        $headers = @{ 'User-Agent' = 'JukeboxDownloadWizard/0.2.2.2 (marquee metadata lookup)' }
+        $headers = @{ 'User-Agent' = 'JukeboxDownloadWizard/0.2.3.0 (marquee metadata lookup)' }
         $response = Invoke-RestMethod -Uri $uri -Headers $headers -TimeoutSec 15
         if ($response.artists -and $response.artists.Count -gt 0 -and $response.artists[0].id) {
             return [string]$response.artists[0].id

@@ -1,3 +1,9 @@
+Version 0.2.3.0
+- Replaced the separate download action controls with a single Download button that opens download option prompts.
+- Added MP3 audio-only downloads alongside MP4 video downloads.
+- Kept standard marquee artwork generation available after either MP4 or MP3 downloads.
+
+--------------------------------------------------
 Version 0.2.2.2
 - Improved Stop Search feedback and kept reviewed videos available for selection.
 - Added the required " (JUKE)" suffix to generated BitLCD marquee JPG filenames.

@@ -16,7 +16,7 @@ namespace JukeboxDownloadWizard
 {
     public class MainWindow : Window
     {
-        private const string AppVersion = "0.2.2.2";
+        private const string AppVersion = "0.2.3.0";
         private const string SsdFolderName = "ha8800_screensaver";
         private const string BitLcdArtworkFolder = "bitlcd\\thirdparty\\OneSauce";
         private const long SsdMoveReserveBytes = 1024L * 1024L * 1024L;
@@ -275,14 +275,17 @@ namespace JukeboxDownloadWizard
             Button validateButton = Button("Resource Check", double.NaN, 32);
             Button showConsoleButton = Button("Show Console Window", double.NaN, 32);
             Button generateMissingMarqueesButton = Button("Generate Missing MP4 Marquees", double.NaN, 32);
+            Button convertMp4ToMp3Button = Button("Create MP3s from MP4s", double.NaN, 32);
             Button viewGeneratedMarqueesButton = Button("View Generated Marquees on PC", double.NaN, 32);
             validateButton.Margin = new Thickness(0, 8, 0, 0);
             showConsoleButton.Margin = new Thickness(0, 8, 0, 0);
             generateMissingMarqueesButton.Margin = new Thickness(0, 8, 0, 0);
+            convertMp4ToMp3Button.Margin = new Thickness(0, 8, 0, 0);
             viewGeneratedMarqueesButton.Margin = new Thickness(0, 8, 0, 0);
             left.Children.Add(validateButton);
             left.Children.Add(showConsoleButton);
             left.Children.Add(generateMissingMarqueesButton);
+            left.Children.Add(convertMp4ToMp3Button);
             left.Children.Add(viewGeneratedMarqueesButton);
             GridSplitter leftSplitter = VerticalSplitter();
             Grid.SetColumn(leftSplitter, 1);
@@ -353,14 +356,8 @@ namespace JukeboxDownloadWizard
             actionScroller.Content = actions;
             actionPanel.Child = actionScroller;
             actions.Children.Add(Heading("Download Actions"));
-            actions.Children.Add(new TextBlock { Text = "Resolution", FontSize = 13, FontWeight = FontWeights.SemiBold, Foreground = Brush("#E5E7EB"), Margin = new Thickness(0, 0, 0, 8) });
-            actions.Children.Add(BuildResolutionToggle());
-            actions.Children.Add(new TextBlock { Text = "Audio Normalization", FontSize = 13, FontWeight = FontWeights.SemiBold, Foreground = Brush("#E5E7EB"), Margin = new Thickness(0, 12, 0, 8) });
-            actions.Children.Add(BuildAudioNormalizationToggle());
-            actions.Children.Add(new TextBlock { Text = "Marquee Artwork", FontSize = 13, FontWeight = FontWeights.SemiBold, Foreground = Brush("#E5E7EB"), Margin = new Thickness(0, 12, 0, 8) });
-            actions.Children.Add(BuildMarqueeToggle());
-            actions.Children.Add(Separator());
-            downloadButton = Button("Download Videos to PC", double.NaN, 32);
+            actions.Children.Add(new TextBlock { Text = "Choose download type, video format, audio normalization, and marquee artwork when you click Download.", TextWrapping = TextWrapping.Wrap, FontSize = 12, Foreground = Brush("#9CA3AF"), Margin = new Thickness(0, 0, 0, 12) });
+            downloadButton = Button("Download...", double.NaN, 32);
             Button moveToSsdButton = Button("Move MP4s to SSD", double.NaN, 32);
             Button moveBitLcdArtworkButton = Button("Move BitLCD Artwork", double.NaN, 32);
             downloadButton.Background = Brush("#2563EB");
@@ -380,7 +377,8 @@ namespace JukeboxDownloadWizard
             moveButtons.Children.Add(moveToSsdButton);
             moveButtons.Children.Add(moveBitLcdArtworkButton);
             actions.Children.Add(downloadButton);
-            actions.Children.Add(moveButtons);            actions.Children.Add(Separator());
+            actions.Children.Add(moveButtons);
+            actions.Children.Add(Separator());
             actions.Children.Add(SectionTitle("Access Resource Paths"));
             Button openResourcesButton = Button("App Resources Directory", double.NaN, 32);
             Button openDownloadsButton = Button("Open Downloads Folder on PC", double.NaN, 32);
@@ -399,19 +397,13 @@ namespace JukeboxDownloadWizard
             AddActionControl(validateButton);
             AddActionControl(downloadButton);
             AddActionControl(startSearchButton);
-            AddActionControl(resolution480Button);
-            AddActionControl(resolution720Button);
-            AddActionControl(resolution1080Button);
-            AddActionControl(audioNormalizeOffButton);
-            AddActionControl(audioNormalizeOnButton);
-            AddActionControl(standardMarqueeOffButton);
-            AddActionControl(standardMarqueeOnButton);
             AddActionControl(updateButton);
             AddActionControl(clearButton);
             AddActionControl(openSsdButton);
             AddActionControl(moveToSsdButton);
             AddActionControl(moveBitLcdArtworkButton);
             AddActionControl(generateMissingMarqueesButton);
+            AddActionControl(convertMp4ToMp3Button);
 
             refreshButton.Click += delegate { RefreshUrls(); };
             updateButton.Click += delegate { UpdateUrlList(); };
@@ -436,6 +428,7 @@ namespace JukeboxDownloadWizard
             moveToSsdButton.Click += delegate { MoveToSsd(); };
             moveBitLcdArtworkButton.Click += delegate { MoveBitLcdArtwork(); };
             generateMissingMarqueesButton.Click += delegate { GenerateMissingMarquees(); };
+            convertMp4ToMp3Button.Click += delegate { ConvertMp4FilesToMp3(); };
             viewGeneratedMarqueesButton.Click += delegate { OpenGeneratedMarqueesFolder(); };
         }
 
@@ -900,14 +893,7 @@ namespace JukeboxDownloadWizard
         private void UpdateDownloadButtonText()
         {
             if (downloadButton == null) { return; }
-            if (standardMarqueeEnabled)
-            {
-                downloadButton.Content = "Download Videos + Generate Marquees";
-            }
-            else
-            {
-                downloadButton.Content = "Download Videos to PC";
-            }
+            downloadButton.Content = "Download...";
         }
         private void UpdateMarqueeToggleVisuals()
         {
@@ -1374,9 +1360,141 @@ namespace JukeboxDownloadWizard
             }
         }
 
+        private bool ChooseDownloadOptions(out bool audioOnly, out int resolution, out bool normalizeAudio)
+        {
+            audioOnly = false;
+            resolution = GetVideoResolution();
+            normalizeAudio = GetAudioNormalization();
+            bool selectedAudioOnly = audioOnly;
+            int selectedResolution = resolution;
+            bool selectedNormalizeAudio = normalizeAudio;
+
+            Window dialog = new Window
+            {
+                Title = "Download Options",
+                Owner = this,
+                Width = 430,
+                Height = 380,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                ResizeMode = ResizeMode.NoResize,
+                Background = Brush("#0B1020"),
+                Foreground = Brush("#E5E7EB")
+            };
+
+            StackPanel panel = new StackPanel { Margin = new Thickness(18) };
+            dialog.Content = panel;
+            panel.Children.Add(new TextBlock { Text = "Choose what to download:", FontWeight = FontWeights.SemiBold, Foreground = Brush("#FFFFFF"), Margin = new Thickness(0, 0, 0, 10) });
+
+            RadioButton videoRadio = DialogRadio("MP4 video", true, "DownloadMediaType");
+            RadioButton audioRadio = DialogRadio("MP3 audio", false, "DownloadMediaType");
+            panel.Children.Add(videoRadio);
+            panel.Children.Add(audioRadio);
+
+            StackPanel videoOptions = new StackPanel { Margin = new Thickness(0, 14, 0, 0) };
+            panel.Children.Add(videoOptions);
+            videoOptions.Children.Add(new TextBlock { Text = "Video format", FontWeight = FontWeights.SemiBold, Foreground = Brush("#FFFFFF"), Margin = new Thickness(0, 0, 0, 8) });
+            StackPanel resolutionRow = new StackPanel { Orientation = Orientation.Horizontal };
+            RadioButton r480 = DialogRadio("480p Compact", resolution == 480, "DownloadResolution");
+            RadioButton r720 = DialogRadio("720p Standard", resolution == 720, "DownloadResolution");
+            RadioButton r1080 = DialogRadio("1080p HD", resolution == 1080, "DownloadResolution");
+            r480.Margin = new Thickness(0, 0, 18, 0);
+            r720.Margin = new Thickness(0, 0, 18, 0);
+            resolutionRow.Children.Add(r480);
+            resolutionRow.Children.Add(r720);
+            resolutionRow.Children.Add(r1080);
+            videoOptions.Children.Add(resolutionRow);
+            videoOptions.Children.Add(new TextBlock { Text = "Audio normalization", FontWeight = FontWeights.SemiBold, Foreground = Brush("#FFFFFF"), Margin = new Thickness(0, 14, 0, 8) });
+            CheckBox normalizeCheck = new CheckBox { Content = "Normalize video audio", IsChecked = normalizeAudio, Foreground = Brush("#E5E7EB") };
+            videoOptions.Children.Add(normalizeCheck);
+
+            TextBlock mp3Note = new TextBlock { Text = "MP3 downloads use the best available audio. Marquee artwork can still be generated after download.", TextWrapping = TextWrapping.Wrap, Foreground = Brush("#9CA3AF"), Margin = new Thickness(0, 14, 0, 0), Visibility = Visibility.Collapsed };
+            panel.Children.Add(mp3Note);
+
+            RoutedEventHandler updateVisibility = delegate
+            {
+                bool isVideo = videoRadio.IsChecked == true;
+                videoOptions.Visibility = isVideo ? Visibility.Visible : Visibility.Collapsed;
+                mp3Note.Visibility = isVideo ? Visibility.Collapsed : Visibility.Visible;
+            };
+            videoRadio.Checked += updateVisibility;
+            audioRadio.Checked += updateVisibility;
+            updateVisibility(null, null);
+
+            Grid buttons = new Grid { Margin = new Thickness(0, 22, 0, 0) };
+            buttons.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            buttons.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
+            buttons.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            Button ok = Button("OK", double.NaN, 34);
+            Button cancel = Button("Cancel", double.NaN, 34);
+            ok.Background = Brush("#16A34A");
+            ok.BorderBrush = Brush("#22C55E");
+            Grid.SetColumn(ok, 0);
+            Grid.SetColumn(cancel, 2);
+            buttons.Children.Add(ok);
+            buttons.Children.Add(cancel);
+            panel.Children.Add(buttons);
+
+            ok.Click += delegate
+            {
+                selectedAudioOnly = audioRadio.IsChecked == true;
+                if (r480.IsChecked == true) { selectedResolution = 480; }
+                else if (r1080.IsChecked == true) { selectedResolution = 1080; }
+                else { selectedResolution = 720; }
+                selectedNormalizeAudio = normalizeCheck.IsChecked == true;
+                dialog.DialogResult = true;
+            };
+            cancel.Click += delegate { dialog.DialogResult = false; };
+
+            bool accepted = dialog.ShowDialog() == true;
+            if (accepted)
+            {
+                audioOnly = selectedAudioOnly;
+                resolution = selectedResolution;
+                normalizeAudio = selectedNormalizeAudio;
+            }
+            return accepted;
+        }
+
+        private RadioButton DialogRadio(string text, bool isChecked, string groupName)
+        {
+            return new RadioButton { Content = text, IsChecked = isChecked, GroupName = groupName, Foreground = Brush("#E5E7EB"), Margin = new Thickness(0, 0, 0, 6) };
+        }
+
+        private bool ChooseMarqueeArtwork()
+        {
+            MessageBoxResult result = MessageBox.Show(this, "Generate standard marquee artwork after the download completes?", "Generate Marquee Artwork", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+            if (result == MessageBoxResult.Cancel) { throw new OperationCanceledException(); }
+            return result == MessageBoxResult.Yes;
+        }
+
         private void StartDownloadVideos()
         {
-            InvokeBackend(new[] { "-Action", "Download", "-Resolution", GetVideoResolution().ToString(), "-NormalizeAudio", GetAudioNormalization().ToString(), "-GenerateStandardMarquee", GetStandardMarquee().ToString(), "-GenerateFullColorMarquee", "False" }, "Downloading videos...");
+            bool audioOnly;
+            int resolution;
+            bool normalizeAudio;
+            if (!ChooseDownloadOptions(out audioOnly, out resolution, out normalizeAudio)) { return; }
+
+            bool generateStandardMarquee;
+            try
+            {
+                generateStandardMarquee = ChooseMarqueeArtwork();
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+
+            if (audioOnly)
+            {
+                InvokeBackend(new[] { "-Action", "Download", "-DownloadMediaType", "Audio", "-NormalizeAudio", "False", "-GenerateStandardMarquee", generateStandardMarquee.ToString(), "-GenerateFullColorMarquee", "False" }, "Downloading audio...");
+            }
+            else
+            {
+                SetVideoResolution(resolution);
+                SetAudioNormalization(normalizeAudio);
+                SetStandardMarquee(generateStandardMarquee);
+                InvokeBackend(new[] { "-Action", "Download", "-DownloadMediaType", "Video", "-Resolution", resolution.ToString(), "-NormalizeAudio", normalizeAudio.ToString(), "-GenerateStandardMarquee", generateStandardMarquee.ToString(), "-GenerateFullColorMarquee", "False" }, "Downloading videos...");
+            }
         }
         private void GenerateMissingMarquees()
         {
@@ -1391,7 +1509,7 @@ namespace JukeboxDownloadWizard
                 return;
             }
 
-            List<string> selected = ChooseMp4FilesForMarquees(folder, files);
+            List<string> selected = ChooseMp4Files(folder, files, "Select videos for marquee generation", "Select MP4 videos to generate marquees for:", "Generate");
             if (selected == null || selected.Count == 0)
             {
                 ShowAppInfo("No videos were selected for marquee generation.", "Generate Missing Marquees");
@@ -1403,6 +1521,30 @@ namespace JukeboxDownloadWizard
             InvokeBackend(new[] { "-Action", "GenerateMarquees", "-Value", listFile, "-GenerateStandardMarquee", "True", "-GenerateFullColorMarquee", "False" }, "Generating marquees...");
         }
 
+        private void ConvertMp4FilesToMp3()
+        {
+            string folder = ChooseMp4Folder();
+            if (String.IsNullOrWhiteSpace(folder)) { return; }
+
+            List<string> files = new List<string>(Directory.GetFiles(folder, "*.mp4", SearchOption.TopDirectoryOnly));
+            files.Sort(StringComparer.OrdinalIgnoreCase);
+            if (files.Count == 0)
+            {
+                ShowAppInfo("No MP4 files were found in this folder.", "Create MP3s from MP4s");
+                return;
+            }
+
+            List<string> selected = ChooseMp4Files(folder, files, "Select videos for MP3 conversion", "Select MP4 videos to convert to MP3:", "Convert");
+            if (selected == null || selected.Count == 0)
+            {
+                ShowAppInfo("No videos were selected for MP3 conversion.", "Create MP3s from MP4s");
+                return;
+            }
+
+            string listFile = Path.Combine(Path.GetTempPath(), "jdw_mp3_conversion_selection_" + Guid.NewGuid().ToString("N") + ".txt");
+            File.WriteAllLines(listFile, selected.ToArray(), Encoding.UTF8);
+            InvokeBackend(new[] { "-Action", "ConvertMp4ToMp3", "-Value", listFile }, "Converting MP4s to MP3...");
+        }
         private void OpenGeneratedMarqueesFolder()
         {
             string marqueeDir = Path.Combine(downloadsDir, "marquee");
@@ -1431,11 +1573,11 @@ namespace JukeboxDownloadWizard
                 return result == System.Windows.Forms.DialogResult.OK ? dialog.SelectedPath : "";
             }
         }
-        private List<string> ChooseMp4FilesForMarquees(string folder, List<string> files)
+        private List<string> ChooseMp4Files(string folder, List<string> files, string title, string prompt, string okLabel)
         {
             Window dialog = new Window
             {
-                Title = "Select videos for marquee generation",
+                Title = title,
                 Owner = this,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
                 Width = Math.Min(760, Math.Max(520, ActualWidth * 0.75)),
@@ -1453,7 +1595,7 @@ namespace JukeboxDownloadWizard
 
             TextBlock header = new TextBlock
             {
-                Text = "Select MP4 videos to generate marquees for:\n" + folder,
+                Text = prompt + "\n" + folder,
                 Foreground = Brush("#E5E7EB"),
                 FontWeight = FontWeights.SemiBold,
                 Margin = new Thickness(0, 0, 0, 10),
@@ -1499,7 +1641,7 @@ namespace JukeboxDownloadWizard
 
             Button selectAll = Button("Select All", 110, 34);
             Button deselectAll = Button("Deselect All", 120, 34);
-            Button ok = Button("Generate", 110, 34);
+            Button ok = Button(okLabel, 110, 34);
             Button cancel = Button("Cancel", 100, 34);
             ok.Background = Brush("#16A34A");
             ok.BorderBrush = Brush("#22C55E");
@@ -3286,6 +3428,7 @@ namespace JukeboxDownloadWizard
             if (action == "Validate") return "Validate";
             if (action == "Download") return "Download";
             if (action == "GenerateMarquees") return "Generate Marquees";
+            if (action == "ConvertMp4ToMp3") return "Convert MP4s to MP3";
             if (action == "AddVideo") return "Add Video";
             if (action == "ImportSource") return "Import Videos";
             if (action == "Search") return "Search";
@@ -3303,10 +3446,13 @@ namespace JukeboxDownloadWizard
             if (action == "Validate") return "Checking setup...";
             if (action == "Download")
             {
+                string mediaType = ArgValue(args, "-DownloadMediaType");
+                if (mediaType == "Audio") { return "Starting audio downloads..."; }
                 string resolution = ArgValue(args, "-Resolution");
                 string resolutionText = resolution.Length > 0 ? " at " + resolution + "p" : "";
                 return "Starting video downloads" + resolutionText + "...";
             }
+            if (action == "ConvertMp4ToMp3") return "Starting MP4 to MP3 conversion...";
             if (action == "AddVideo") return "Adding one video: " + value;
             if (action == "ImportSource") return "Reading playlist or channel: " + value + (limit.Length > 0 ? " (limit: " + limit + ")" : "");
             if (action == "Search") return "Searching YouTube for: " + value + (limit.Length > 0 ? " (limit: " + limit + ")" : "");
@@ -3389,6 +3535,7 @@ namespace JukeboxDownloadWizard
 
         private void AddActionControl(Control control)
         {
+            if (control == null) { return; }
             if (!actionControls.Contains(control)) actionControls.Add(control);
         }
 
