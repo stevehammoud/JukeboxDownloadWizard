@@ -438,7 +438,7 @@ if (Test-Path -LiteralPath $cachePath) {
 }
 if (Test-Path -LiteralPath $missPath) { return }
 
-$headers = @{ 'User-Agent' = 'JukeboxDownloadWizard/0.2.3.0 ( https://musicbrainz.org/ )' }
+$headers = @{ 'User-Agent' = 'JukeboxDownloadWizard/0.2.3.1 ( https://musicbrainz.org/ )' }
 
 try {
     $recording = Find-Recording -ArtistValue $Artist -TitleValue $Title -Headers $headers

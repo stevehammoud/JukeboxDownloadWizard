@@ -1,6 +1,6 @@
 Jukebox Download Wizard Inno Setup Build Notes
 
-Version: 0.2.3.0
+Version: 0.2.3.1
 
 Purpose:
 

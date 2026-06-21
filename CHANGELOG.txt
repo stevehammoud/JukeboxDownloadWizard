@@ -1,6 +1,11 @@
+Version 0.2.3.1
+- Refreshed the bundled yt-dlp executable to 2026.06.09 to avoid the older-than-90-days warning.
+
+--------------------------------------------------
 Version 0.2.3.0
 - Replaced the separate download action controls with a single Download button that opens download option prompts.
 - Added MP3 audio-only downloads alongside MP4 video downloads.
+- Added a tool button to create MP3 files from selected local or external MP4 files without deleting the source MP4s.
 - Kept standard marquee artwork generation available after either MP4 or MP3 downloads.
 
 --------------------------------------------------

@@ -16,7 +16,7 @@ namespace JukeboxDownloadWizard
 {
     public class MainWindow : Window
     {
-        private const string AppVersion = "0.2.3.0";
+        private const string AppVersion = "0.2.3.1";
         private const string SsdFolderName = "ha8800_screensaver";
         private const string BitLcdArtworkFolder = "bitlcd\\thirdparty\\OneSauce";
         private const long SsdMoveReserveBytes = 1024L * 1024L * 1024L;
