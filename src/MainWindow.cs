@@ -16,12 +16,16 @@ namespace JukeboxDownloadWizard
 {
     public class MainWindow : Window
     {
-        private const string AppVersion = "0.2.3.2";
+private const string AppVersion = "0.3.0.0";
         private const string SsdFolderName = "ha8800_screensaver";
         private const string BitLcdArtworkFolder = "bitlcd\\thirdparty\\OneSauce";
         private const long SsdMoveReserveBytes = 1024L * 1024L * 1024L;
         private const int DefaultMinDurationSeconds = 180;
         private const int DefaultMaxDurationSeconds = 600;
+        private const int MarqueeSourceFileNameLimit = 97;
+        private const int MarqueeSourceFileNameWarningLength = 98;
+        private const int GeneratedMarqueeFileNameLimit = 104;
+        private const int GeneratedMarqueeFileNameWarningLength = 105;
 
         private readonly string packageRoot;
         private readonly string dataRoot;
@@ -103,11 +107,32 @@ namespace JukeboxDownloadWizard
             }
         }
 
+        private class MarqueeGenerationOptions
+        {
+            public bool Standard { get; set; }
+            public bool FullColor { get; set; }
+            public bool Animated { get; set; }
+        }
+
+        private class MarqueeArtworkSource
+        {
+            public string TypeKey { get; set; }
+            public string DisplayName { get; set; }
+            public string Folder { get; set; }
+            public int Count { get; set; }
+
+            public override string ToString()
+            {
+                return DisplayName + " (" + Count.ToString() + " file" + (Count == 1 ? "" : "s") + ") - " + Folder;
+            }
+        }
+
         public MainWindow()
         {
             packageRoot = AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
             dataRoot = Path.Combine(packageRoot, ".jukebox_download_wizard");
-            assetsDir = Path.Combine(dataRoot, "assets");
+            string devAssetsDir = Path.Combine(packageRoot, "assets");
+            assetsDir = File.Exists(Path.Combine(devAssetsDir, "lib", "gui_backend.ps1")) ? devAssetsDir : Path.Combine(dataRoot, "assets");
             resourcesDir = Path.Combine(packageRoot, "resources");
             resourceCacheDir = Path.Combine(assetsDir, "resources", "cache");
             downloadsDir = Path.Combine(packageRoot, "downloads");
@@ -502,7 +527,9 @@ namespace JukeboxDownloadWizard
             grid.Children.Add(standardMarqueeOnButton);
             SetNoMarquee();
             return grid;
-        }        private Grid BuildFooterStatusBar()
+        }
+
+        private Grid BuildFooterStatusBar()
         {
             Grid footer = new Grid { Margin = new Thickness(0, 10, 0, 0), MinHeight = 26 };
             footer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -901,6 +928,7 @@ namespace JukeboxDownloadWizard
             StyleThreeStateButton(standardMarqueeOffButton, !standardMarqueeEnabled, "#2563EB", "#3B82F6");
             StyleThreeStateButton(standardMarqueeOnButton, standardMarqueeEnabled, "#2563EB", "#3B82F6");
         }
+
         private void StyleThreeStateButton(Button button, bool active, string activeColor, string activeBorder)
         {
             button.Background = Brush(active ? activeColor : "#1F2937");
@@ -1106,7 +1134,18 @@ namespace JukeboxDownloadWizard
             List<SsdTarget> roots = FindBitLcdArtworkRoots();
             if (roots.Count == 0)
             {
-                ShowAppInfo("BitLCD third-party artwork directory not detected. Artwork remains in " + Path.Combine(downloadsDir, "marquee"), "Move BitLCD Artwork");
+                ShowAppInfo("BitLCD third-party artwork directory not detected. Artwork remains in " + Path.Combine(downloadsDir, "marquees"), "Move BitLCD Artwork");
+                return;
+            }
+
+            MarqueeArtworkSource source = ChooseMarqueeArtworkSource();
+            if (source == null || String.IsNullOrWhiteSpace(source.Folder)) { return; }
+
+            List<string> selectedFiles = ChooseMarqueeArtworkFiles(source);
+            if (selectedFiles == null) { return; }
+            if (selectedFiles.Count == 0)
+            {
+                ShowAppInfo("Choose at least one marquee artwork file to move.", "Move BitLCD Artwork");
                 return;
             }
 
@@ -1122,14 +1161,265 @@ namespace JukeboxDownloadWizard
                 return;
             }
 
-            MessageBoxResult answer = ShowAppDialog("Move all marquee artwork to this BitLCD folder?\n\n" + target, "Confirm Move BitLCD Artwork", MessageBoxButton.YesNo);
+            MessageBoxResult answer = ShowAppDialog("Move " + selectedFiles.Count.ToString() + " " + source.DisplayName + " marquee artwork file" + (selectedFiles.Count == 1 ? "" : "s") + " from:\n\n" + source.Folder + "\n\nto this BitLCD folder?\n\n" + target, "Confirm Move BitLCD Artwork", MessageBoxButton.YesNo);
             if (answer == MessageBoxResult.Yes)
             {
-                MoveBitLcdArtworkInteractive(target);
+                MoveBitLcdArtworkInteractive(selectedFiles, source.Folder, target);
             }
         }
 
-        private void MoveBitLcdArtworkInteractive(string target)
+        private MarqueeArtworkSource ChooseMarqueeArtworkSource()
+        {
+            string root = Path.Combine(downloadsDir, "marquees");
+            if (!Directory.Exists(root))
+            {
+                ShowAppInfo("No marquee artwork folder was found. Nothing to move.", "Move BitLCD Artwork");
+                return null;
+            }
+
+            List<MarqueeArtworkSource> candidates = new List<MarqueeArtworkSource>();
+            foreach (string type in new[] { "standard", "full_color", "animated" })
+            {
+                string folder = Path.Combine(root, type);
+                if (!Directory.Exists(folder)) { continue; }
+                int count = Directory.GetFiles(folder, "*.jpg", SearchOption.TopDirectoryOnly).Length +
+                            Directory.GetFiles(folder, "*.png", SearchOption.TopDirectoryOnly).Length +
+                            Directory.GetFiles(folder, "*.mp4", SearchOption.TopDirectoryOnly).Length;
+                if (count > 0)
+                {
+                    candidates.Add(new MarqueeArtworkSource
+                    {
+                        TypeKey = type,
+                        DisplayName = GetMarqueeTypeDisplayName(type),
+                        Folder = folder,
+                        Count = count
+                    });
+                }
+            }
+
+            if (candidates.Count == 0)
+            {
+                ShowAppInfo("Marquee artwork folders are empty. Nothing to move.", "Move BitLCD Artwork");
+                return null;
+            }
+            return ChooseMarqueeArtworkType(candidates);
+        }
+
+        private string GetMarqueeTypeDisplayName(string type)
+        {
+            if (String.Equals(type, "standard", StringComparison.OrdinalIgnoreCase)) { return "Standard"; }
+            if (String.Equals(type, "full_color", StringComparison.OrdinalIgnoreCase)) { return "Full Color"; }
+            if (String.Equals(type, "animated", StringComparison.OrdinalIgnoreCase)) { return "Animated"; }
+            return type.Replace("_", " ");
+        }
+
+        private MarqueeArtworkSource ChooseMarqueeArtworkType(List<MarqueeArtworkSource> candidates)
+        {
+            Window dialog = new Window
+            {
+                Title = "Choose Marquee Type",
+                Owner = this,
+                Width = 680,
+                Height = 340,
+                MinWidth = 560,
+                MinHeight = 300,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Background = Brush("#0B1020"),
+                Foreground = Brush("#E5E7EB"),
+                ShowInTaskbar = false
+            };
+
+            Grid root = new Grid { Margin = new Thickness(14) };
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            dialog.Content = root;
+
+            TextBlock header = new TextBlock
+            {
+                Text = "Choose one generated marquee type to move. Only one type should be uploaded to the BitLCD drive at a time.",
+                Foreground = Brush("#E5E7EB"),
+                TextWrapping = TextWrapping.Wrap,
+                FontWeight = FontWeights.SemiBold,
+                Margin = new Thickness(0, 0, 0, 10)
+            };
+            root.Children.Add(header);
+
+            ListBox list = new ListBox
+            {
+                Background = Brush("#0F172A"),
+                Foreground = Brush("#E5E7EB"),
+                BorderBrush = Brush("#334155"),
+                FontFamily = new FontFamily("Consolas"),
+                FontSize = 13
+            };
+            foreach (MarqueeArtworkSource candidate in candidates) { list.Items.Add(candidate); }
+            if (list.Items.Count > 0) { list.SelectedIndex = 0; }
+            Grid.SetRow(list, 1);
+            root.Children.Add(list);
+
+            StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
+            Button ok = Button("Choose Files", 120, 32);
+            Button cancel = Button("Cancel", 90, 32);
+            ok.Background = Brush("#2563EB");
+            ok.BorderBrush = Brush("#3B82F6");
+            ok.Margin = new Thickness(0, 0, 8, 0);
+            buttons.Children.Add(ok);
+            buttons.Children.Add(cancel);
+            Grid.SetRow(buttons, 2);
+            root.Children.Add(buttons);
+
+            MarqueeArtworkSource selected = null;
+            ok.Click += delegate
+            {
+                selected = list.SelectedItem as MarqueeArtworkSource;
+                if (selected == null)
+                {
+                    ShowAppInfo("Choose a marquee type.", "Choose Marquee Type", dialog);
+                    return;
+                }
+                dialog.DialogResult = true;
+            };
+            cancel.Click += delegate { dialog.DialogResult = false; };
+            list.MouseDoubleClick += delegate
+            {
+                selected = list.SelectedItem as MarqueeArtworkSource;
+                if (selected != null) { dialog.DialogResult = true; }
+            };
+
+            return dialog.ShowDialog() == true ? selected : null;
+        }
+
+        private List<string> ChooseMarqueeArtworkFiles(MarqueeArtworkSource source)
+        {
+            List<string> files = GetMarqueeArtworkFiles(source.Folder);
+            if (files.Count == 0)
+            {
+                ShowAppInfo(source.DisplayName + " marquee artwork folder is empty. Nothing to move.", "Move BitLCD Artwork");
+                return null;
+            }
+
+            Window dialog = new Window
+            {
+                Title = "Choose " + source.DisplayName + " Marquee Files",
+                Owner = this,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Width = Math.Min(820, Math.Max(560, ActualWidth * 0.78)),
+                Height = Math.Min(740, Math.Max(460, SystemParameters.WorkArea.Height * 0.72)),
+                Background = Brush("#0B1020"),
+                Foreground = Brush("#E5E7EB"),
+                ShowInTaskbar = false
+            };
+
+            Grid root = new Grid { Margin = new Thickness(14) };
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            dialog.Content = root;
+
+            TextBlock header = new TextBlock
+            {
+                Text = "Select " + source.DisplayName + " marquee artwork files to move from:\n" + source.Folder,
+                Foreground = Brush("#E5E7EB"),
+                FontWeight = FontWeights.SemiBold,
+                Margin = new Thickness(0, 0, 0, 10),
+                TextWrapping = TextWrapping.Wrap
+            };
+            root.Children.Add(header);
+
+            StackPanel listPanel = new StackPanel();
+            List<CheckBox> checkBoxes = new List<CheckBox>();
+            foreach (string file in files)
+            {
+                FileInfo info = new FileInfo(file);
+                CheckBox box = new CheckBox
+                {
+                    Content = Path.GetFileName(file) + "  (" + FormatBytes(info.Length) + ")",
+                    Tag = file,
+                    IsChecked = true,
+                    Foreground = Brush("#E5E7EB"),
+                    Margin = new Thickness(2, 4, 2, 4)
+                };
+                checkBoxes.Add(box);
+                listPanel.Children.Add(box);
+            }
+
+            ScrollViewer viewer = new ScrollViewer
+            {
+                Content = listPanel,
+                Background = Brush("#0F172A"),
+                BorderBrush = Brush("#334155"),
+                BorderThickness = new Thickness(1),
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
+            };
+            ApplyDarkScrollBars(viewer);
+            Grid.SetRow(viewer, 1);
+            root.Children.Add(viewer);
+
+            Grid buttons = new Grid { Margin = new Thickness(0, 12, 0, 0) };
+            buttons.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            buttons.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            buttons.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            buttons.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            buttons.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            Button selectAll = Button("Select All", 110, 34);
+            Button deselectAll = Button("Deselect All", 120, 34);
+            Button ok = Button("Move Selected", 122, 34);
+            Button cancel = Button("Cancel", 100, 34);
+            ok.Background = Brush("#16A34A");
+            ok.BorderBrush = Brush("#22C55E");
+            ok.FontWeight = FontWeights.SemiBold;
+            deselectAll.Margin = new Thickness(8, 0, 0, 0);
+            ok.Margin = new Thickness(0, 0, 8, 0);
+
+            Grid.SetColumn(selectAll, 0);
+            Grid.SetColumn(deselectAll, 1);
+            Grid.SetColumn(ok, 3);
+            Grid.SetColumn(cancel, 4);
+            buttons.Children.Add(selectAll);
+            buttons.Children.Add(deselectAll);
+            buttons.Children.Add(ok);
+            buttons.Children.Add(cancel);
+            Grid.SetRow(buttons, 2);
+            root.Children.Add(buttons);
+
+            List<string> selected = null;
+            selectAll.Click += delegate { foreach (CheckBox box in checkBoxes) { box.IsChecked = true; } };
+            deselectAll.Click += delegate { foreach (CheckBox box in checkBoxes) { box.IsChecked = false; } };
+            cancel.Click += delegate { dialog.DialogResult = false; dialog.Close(); };
+            ok.Click += delegate
+            {
+                selected = new List<string>();
+                foreach (CheckBox box in checkBoxes)
+                {
+                    if (box.IsChecked == true && box.Tag is string) { selected.Add((string)box.Tag); }
+                }
+                if (selected.Count == 0)
+                {
+                    ShowAppInfo("Choose at least one marquee artwork file.", "Choose Marquee Files", dialog);
+                    return;
+                }
+                dialog.DialogResult = true;
+                dialog.Close();
+            };
+
+            return dialog.ShowDialog() == true ? selected : null;
+        }
+
+        private List<string> GetMarqueeArtworkFiles(string folder)
+        {
+            List<string> files = new List<string>();
+            if (!Directory.Exists(folder)) { return files; }
+            files.AddRange(Directory.GetFiles(folder, "*.png", SearchOption.TopDirectoryOnly));
+            files.AddRange(Directory.GetFiles(folder, "*.jpg", SearchOption.TopDirectoryOnly));
+            files.AddRange(Directory.GetFiles(folder, "*.mp4", SearchOption.TopDirectoryOnly));
+            files.Sort(StringComparer.OrdinalIgnoreCase);
+            return files;
+        }
+
+        private void MoveBitLcdArtworkInteractive(List<string> selectedFiles, string sourceFolder, string target)
         {
             if (Dispatcher.CheckAccess())
             {
@@ -1137,7 +1427,7 @@ namespace JukeboxDownloadWizard
                 activeOperationAction = "MoveBitLcdArtwork";
                 SetOperation("Move BitLCD Artwork", "Starting", 0);
                 SetBusy(true);
-                ThreadPool.QueueUserWorkItem(delegate { MoveBitLcdArtworkInteractive(target); });
+                ThreadPool.QueueUserWorkItem(delegate { MoveBitLcdArtworkInteractive(selectedFiles, sourceFolder, target); });
                 return;
             }
 
@@ -1149,20 +1439,19 @@ namespace JukeboxDownloadWizard
                 SetBusy(true);
                 Stopwatch moveStopwatch = Stopwatch.StartNew();
 
-                string marqueeDir = Path.Combine(downloadsDir, "marquee");
+                string marqueeDir = sourceFolder;
                 if (!Directory.Exists(marqueeDir))
                 {
                     ShowAppInfo("No marquee artwork folder was found. Nothing to move.", "Move BitLCD Artwork");
                     return;
                 }
 
-                List<string> files = new List<string>();
-                files.AddRange(Directory.GetFiles(marqueeDir, "*.png", SearchOption.TopDirectoryOnly));
-                files.AddRange(Directory.GetFiles(marqueeDir, "*.jpg", SearchOption.TopDirectoryOnly));
+                List<string> files = new List<string>(selectedFiles);
+                files.RemoveAll(delegate(string file) { return String.IsNullOrWhiteSpace(file) || !File.Exists(file) || !IsPathInsideFolder(file, marqueeDir); });
                 files.Sort(StringComparer.OrdinalIgnoreCase);
                 if (files.Count == 0)
                 {
-                    ShowAppInfo("Marquee artwork folder is empty. Nothing to move.", "Move BitLCD Artwork");
+                    ShowAppInfo("No selected marquee artwork files were found. Nothing to move.", "Move BitLCD Artwork");
                     return;
                 }
 
@@ -1216,7 +1505,7 @@ namespace JukeboxDownloadWizard
                     if (!HasEnoughSpaceForMove(target, fileBytes))
                     {
                         WriteOutput("Move stopped before " + fileName + ". Not enough free space remains on the BitLCD drive.");
-                        ShowAppInfo("Not enough free space remains on the BitLCD drive.\n\nStopped before moving:\n" + fileName + "\n\nAlready moved artwork remains on the drive. Remaining artwork remains in downloads\\marquee.", "Move BitLCD Artwork");
+                        ShowAppInfo("Not enough free space remains on the BitLCD drive.\n\nStopped before moving:\n" + fileName + "\n\nAlready moved artwork remains on the drive. Remaining artwork remains in " + marqueeDir + ".", "Move BitLCD Artwork");
                         return;
                     }
                     File.Move(file, destination);
@@ -1474,26 +1763,19 @@ namespace JukeboxDownloadWizard
             bool normalizeAudio;
             if (!ChooseDownloadOptions(out audioOnly, out resolution, out normalizeAudio)) { return; }
 
-            bool generateStandardMarquee;
-            try
-            {
-                generateStandardMarquee = ChooseMarqueeArtwork();
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
+            MarqueeGenerationOptions options = ChooseMarqueeGenerationOptions();
+            if (options == null) { return; }
 
             if (audioOnly)
             {
-                InvokeBackend(new[] { "-Action", "Download", "-DownloadMediaType", "Audio", "-NormalizeAudio", "False", "-GenerateStandardMarquee", generateStandardMarquee.ToString(), "-GenerateFullColorMarquee", "False" }, "Downloading audio...");
+                InvokeBackend(new[] { "-Action", "Download", "-DownloadMediaType", "Audio", "-NormalizeAudio", "False", "-GenerateStandardMarquee", options.Standard.ToString(), "-GenerateFullColorMarquee", "False", "-GenerateVideoMarquee", "False" }, "Downloading audio...");
             }
             else
             {
                 SetVideoResolution(resolution);
                 SetAudioNormalization(normalizeAudio);
-                SetStandardMarquee(generateStandardMarquee);
-                InvokeBackend(new[] { "-Action", "Download", "-DownloadMediaType", "Video", "-Resolution", resolution.ToString(), "-NormalizeAudio", normalizeAudio.ToString(), "-GenerateStandardMarquee", generateStandardMarquee.ToString(), "-GenerateFullColorMarquee", "False" }, "Downloading videos...");
+                SetStandardMarquee(options.Standard);
+                InvokeBackend(new[] { "-Action", "Download", "-DownloadMediaType", "Video", "-Resolution", resolution.ToString(), "-NormalizeAudio", normalizeAudio.ToString(), "-GenerateStandardMarquee", options.Standard.ToString(), "-GenerateFullColorMarquee", options.FullColor.ToString(), "-GenerateVideoMarquee", options.Animated.ToString() }, "Downloading videos...");
             }
         }
         private void GenerateMissingMarquees()
@@ -1516,9 +1798,128 @@ namespace JukeboxDownloadWizard
                 return;
             }
 
+            if (!EnsureSelectedMarqueeFileNamesWithinLimit(ref selected)) { return; }
+
+            MarqueeGenerationOptions options = ChooseMarqueeGenerationOptions();
+            if (options == null) { return; }
+
             string listFile = Path.Combine(Path.GetTempPath(), "jdw_marquee_selection_" + Guid.NewGuid().ToString("N") + ".txt");
             File.WriteAllLines(listFile, selected.ToArray(), Encoding.UTF8);
-            InvokeBackend(new[] { "-Action", "GenerateMarquees", "-Value", listFile, "-GenerateStandardMarquee", "True", "-GenerateFullColorMarquee", "False" }, "Generating marquees...");
+            InvokeBackend(new[] { "-Action", "GenerateMarquees", "-Value", listFile, "-GenerateStandardMarquee", options.Standard.ToString(), "-GenerateFullColorMarquee", options.FullColor.ToString(), "-GenerateVideoMarquee", options.Animated.ToString() }, "Generating marquees...");
+        }
+
+        private MarqueeGenerationOptions ChooseMarqueeGenerationOptions()
+        {
+            Window dialog = new Window
+            {
+                Title = "Choose Marquee Types",
+                Owner = this,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Width = 560,
+                Height = 380,
+                MinWidth = 520,
+                MinHeight = 340,
+                Background = Brush("#0B1020"),
+                Foreground = Brush("#E5E7EB"),
+                ShowInTaskbar = false
+            };
+
+            Grid root = new Grid { Margin = new Thickness(16) };
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            dialog.Content = root;
+
+            TextBlock header = new TextBlock
+            {
+                Text = "Choose which marquee type(s) to generate:",
+                Foreground = Brush("#E5E7EB"),
+                FontWeight = FontWeights.SemiBold,
+                Margin = new Thickness(0, 0, 0, 12)
+            };
+            root.Children.Add(header);
+
+            StackPanel choices = new StackPanel { Margin = new Thickness(0, 4, 0, 0) };
+            Grid.SetRow(choices, 1);
+            root.Children.Add(choices);
+
+            CheckBox standard = MarqueeTypeCheckBox("Standard", true);
+            CheckBox fullColor = MarqueeTypeCheckBox("Full Color");
+            CheckBox animated = MarqueeTypeCheckBox("Animated");
+            choices.Children.Add(standard);
+            choices.Children.Add(fullColor);
+            choices.Children.Add(animated);
+
+            TextBlock warning = new TextBlock
+            {
+                Text = "WARNING:  Uploading more than 1 marquee type (Standard, Full Color, Animated) for a Jukebox title to the BitLCD USB drive will cause unexpected issues and/or complete BitLCD failure.  Ensure only 1 selected marquee is selected when moving the marquee artwork to it's final destination.",
+                Foreground = Brush("#FBBF24"),
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 12, 0, 0),
+                Visibility = Visibility.Collapsed
+            };
+            choices.Children.Add(warning);
+
+            Action updateWarning = delegate
+            {
+                int checkedCount = 0;
+                if (standard.IsChecked == true) { checkedCount++; }
+                if (fullColor.IsChecked == true) { checkedCount++; }
+                if (animated.IsChecked == true) { checkedCount++; }
+                warning.Visibility = checkedCount > 1 ? Visibility.Visible : Visibility.Collapsed;
+            };
+            standard.Checked += delegate { updateWarning(); };
+            standard.Unchecked += delegate { updateWarning(); };
+            fullColor.Checked += delegate { updateWarning(); };
+            fullColor.Unchecked += delegate { updateWarning(); };
+            animated.Checked += delegate { updateWarning(); };
+            animated.Unchecked += delegate { updateWarning(); };
+            updateWarning();
+
+            StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 14, 0, 0) };
+            Button ok = Button("Generate", 110, 34);
+            Button cancel = Button("Cancel", 100, 34);
+            ok.Background = Brush("#16A34A");
+            ok.BorderBrush = Brush("#22C55E");
+            ok.FontWeight = FontWeights.SemiBold;
+            ok.Margin = new Thickness(0, 0, 8, 0);
+            buttons.Children.Add(ok);
+            buttons.Children.Add(cancel);
+            Grid.SetRow(buttons, 3);
+            root.Children.Add(buttons);
+
+            MarqueeGenerationOptions selected = null;
+            ok.Click += delegate
+            {
+                if (standard.IsChecked != true && fullColor.IsChecked != true && animated.IsChecked != true)
+                {
+                    ShowAppInfo("Choose at least one marquee type.", "Choose Marquee Types");
+                    return;
+                }
+                selected = new MarqueeGenerationOptions
+                {
+                    Standard = standard.IsChecked == true,
+                    FullColor = fullColor.IsChecked == true,
+                    Animated = animated.IsChecked == true
+                };
+                dialog.DialogResult = true;
+            };
+            cancel.Click += delegate { dialog.DialogResult = false; };
+
+            return dialog.ShowDialog() == true ? selected : null;
+        }
+
+        private CheckBox MarqueeTypeCheckBox(string text, bool isChecked = false)
+        {
+            return new CheckBox
+            {
+                Content = text,
+                IsChecked = isChecked,
+                Foreground = Brush("#E5E7EB"),
+                FontSize = 14,
+                Margin = new Thickness(2, 5, 2, 5)
+            };
         }
 
         private void ConvertMp4FilesToMp3()
@@ -1547,7 +1948,7 @@ namespace JukeboxDownloadWizard
         }
         private void OpenGeneratedMarqueesFolder()
         {
-            string marqueeDir = Path.Combine(downloadsDir, "marquee");
+            string marqueeDir = Path.Combine(downloadsDir, "marquees");
             if (!Directory.Exists(marqueeDir))
             {
                 Directory.CreateDirectory(marqueeDir);
@@ -1678,6 +2079,160 @@ namespace JukeboxDownloadWizard
             bool? result = dialog.ShowDialog();
             return result == true ? selected : null;
         }
+
+        private bool EnsureSelectedMarqueeFileNamesWithinLimit(ref List<string> selected)
+        {
+            List<Tuple<string, string>> plannedRenames = new List<Tuple<string, string>>();
+            Dictionary<string, string> renamedPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (string file in selected)
+            {
+                string fileName = Path.GetFileName(file);
+                bool existingMarqueeSource = IsExistingMarqueeMp4Source(file);
+                int warningLength = existingMarqueeSource ? GeneratedMarqueeFileNameWarningLength : MarqueeSourceFileNameWarningLength;
+                if (String.IsNullOrWhiteSpace(fileName) || fileName.Length < warningLength) { continue; }
+                string newPath = existingMarqueeSource ? GetShortenedMarqueeMp4Path(file, GeneratedMarqueeFileNameLimit) : GetShortenedMp4Path(file, MarqueeSourceFileNameLimit);
+                if (String.Equals(file, newPath, StringComparison.OrdinalIgnoreCase)) { continue; }
+                plannedRenames.Add(Tuple.Create(file, newPath));
+            }
+
+            if (plannedRenames.Count == 0) { return true; }
+
+            StringBuilder message = new StringBuilder();
+            message.AppendLine("One or more selected MP4 filenames are too long for reliable BitLCD marquee matching.");
+            message.AppendLine();
+            message.AppendLine("The app can shorten these MP4 filenames before generating marquees. Music video sources use " + MarqueeSourceFileNameLimit.ToString() + " characters including .mp4; existing animated marquee sources use " + GeneratedMarqueeFileNameLimit.ToString() + " characters including .mp4 and keep the trailing (JUKE).");
+            message.AppendLine();
+            int shown = 0;
+            foreach (Tuple<string, string> rename in plannedRenames)
+            {
+                if (shown >= 10) { break; }
+                message.AppendLine(Path.GetFileName(rename.Item1));
+                message.AppendLine("  -> " + Path.GetFileName(rename.Item2));
+                message.AppendLine();
+                shown++;
+            }
+            if (plannedRenames.Count > shown)
+            {
+                message.AppendLine("...and " + (plannedRenames.Count - shown).ToString() + " more file(s).");
+                message.AppendLine();
+            }
+            message.AppendLine("Proceed with shortening these filenames?");
+
+            MessageBoxResult answer = ShowAppDialog(message.ToString(), "Filename Over Limit", MessageBoxButton.YesNo);
+            if (answer != MessageBoxResult.Yes) { return false; }
+
+            try
+            {
+                foreach (Tuple<string, string> rename in plannedRenames)
+                {
+                    if (!File.Exists(rename.Item1)) { continue; }
+                    string newPath = rename.Item2;
+                    if (!String.Equals(rename.Item1, newPath, StringComparison.OrdinalIgnoreCase) && File.Exists(newPath))
+                    {
+                        newPath = GetShortenedUniqueFilePath(rename.Item1, MarqueeSourceFileNameLimit);
+                    }
+                    if (String.Equals(rename.Item1, newPath, StringComparison.OrdinalIgnoreCase)) { continue; }
+                    File.Move(rename.Item1, newPath);
+                    renamedPaths[rename.Item1] = newPath;
+                }
+
+                for (int i = 0; i < selected.Count; i++)
+                {
+                    string newPath;
+                    if (renamedPaths.TryGetValue(selected[i], out newPath)) { selected[i] = newPath; }
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                ShowAppInfo("Unable to shorten one or more MP4 filenames.\n\n" + ex.Message, "Filename Over Limit");
+                return false;
+            }
+        }
+
+        private string GetShortenedMp4Path(string path, int maxFileNameLength)
+        {
+            string folder = Path.GetDirectoryName(path) ?? "";
+            string extension = Path.GetExtension(path);
+            string baseName = Path.GetFileNameWithoutExtension(path);
+            int maxBaseLength = Math.Max(1, maxFileNameLength - extension.Length);
+            if (baseName.Length > maxBaseLength) { baseName = baseName.Substring(0, maxBaseLength).Trim(' ', '.', '_', '-'); }
+            if (String.IsNullOrWhiteSpace(baseName)) { baseName = "video"; }
+            string newPath = Path.Combine(folder, baseName + extension);
+            if (String.Equals(path, newPath, StringComparison.OrdinalIgnoreCase)) { return path; }
+            if (!File.Exists(newPath)) { return newPath; }
+            return GetShortenedUniqueFilePath(path, maxFileNameLength);
+        }
+
+        private string GetShortenedMarqueeMp4Path(string path, int maxFileNameLength)
+        {
+            string folder = Path.GetDirectoryName(path) ?? "";
+            string extension = Path.GetExtension(path);
+            string baseName = Path.GetFileNameWithoutExtension(path);
+            const string suffix = " (JUKE)";
+            if (baseName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            {
+                baseName = baseName.Substring(0, baseName.Length - suffix.Length).Trim(' ', '.', '_', '-');
+            }
+            int maxBaseLength = Math.Max(1, maxFileNameLength - extension.Length - suffix.Length);
+            if (baseName.Length > maxBaseLength) { baseName = baseName.Substring(0, maxBaseLength).Trim(' ', '.', '_', '-'); }
+            if (String.IsNullOrWhiteSpace(baseName)) { baseName = "marquee"; }
+            string newPath = Path.Combine(folder, baseName + suffix + extension);
+            if (String.Equals(path, newPath, StringComparison.OrdinalIgnoreCase)) { return path; }
+            if (!File.Exists(newPath)) { return newPath; }
+            return GetShortenedUniqueMarqueeFilePath(path, maxFileNameLength);
+        }
+
+        private string GetShortenedUniqueMarqueeFilePath(string path, int maxFileNameLength)
+        {
+            string folder = Path.GetDirectoryName(path) ?? "";
+            string extension = Path.GetExtension(path);
+            string originalBase = Path.GetFileNameWithoutExtension(path);
+            const string marker = " (JUKE)";
+            if (originalBase.EndsWith(marker, StringComparison.OrdinalIgnoreCase))
+            {
+                originalBase = originalBase.Substring(0, originalBase.Length - marker.Length).Trim(' ', '.', '_', '-');
+            }
+            for (int index = 1; index < 10000; index++)
+            {
+                string suffix = " (" + index.ToString() + ")" + marker;
+                int maxBaseLength = Math.Max(1, maxFileNameLength - extension.Length - suffix.Length);
+                string baseName = originalBase;
+                if (baseName.Length > maxBaseLength) { baseName = baseName.Substring(0, maxBaseLength).Trim(' ', '.', '_', '-'); }
+                if (String.IsNullOrWhiteSpace(baseName)) { baseName = "marquee"; }
+                string candidate = Path.Combine(folder, baseName + suffix + extension);
+                if (String.Equals(path, candidate, StringComparison.OrdinalIgnoreCase) || !File.Exists(candidate)) { return candidate; }
+            }
+            throw new IOException("Could not find an available shortened filename for " + Path.GetFileName(path));
+        }
+
+        private bool IsExistingMarqueeMp4Source(string path)
+        {
+            if (String.IsNullOrWhiteSpace(path)) { return false; }
+            if (!String.Equals(Path.GetExtension(path), ".mp4", StringComparison.OrdinalIgnoreCase)) { return false; }
+            string baseName = Path.GetFileNameWithoutExtension(path);
+            return (!String.IsNullOrWhiteSpace(baseName) && baseName.EndsWith(" (JUKE)", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private string GetShortenedUniqueFilePath(string path, int maxFileNameLength)
+        {
+            string folder = Path.GetDirectoryName(path) ?? "";
+            string extension = Path.GetExtension(path);
+            string originalBase = Path.GetFileNameWithoutExtension(path);
+            for (int index = 1; index < 10000; index++)
+            {
+                string suffix = " (" + index.ToString() + ")";
+                int maxBaseLength = Math.Max(1, maxFileNameLength - extension.Length - suffix.Length);
+                string baseName = originalBase;
+                if (baseName.Length > maxBaseLength) { baseName = baseName.Substring(0, maxBaseLength).Trim(' ', '.', '_', '-'); }
+                if (String.IsNullOrWhiteSpace(baseName)) { baseName = "video"; }
+                string candidate = Path.Combine(folder, baseName + suffix + extension);
+                if (String.Equals(path, candidate, StringComparison.OrdinalIgnoreCase) || !File.Exists(candidate)) { return candidate; }
+            }
+            throw new IOException("Could not find an available shortened filename for " + Path.GetFileName(path));
+        }
+
         private void OpenSsdContents()
         {
             List<SsdTarget> roots = FindSsdRoots();

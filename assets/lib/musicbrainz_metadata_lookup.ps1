@@ -1,6 +1,8 @@
 param(
     [string]$Artist = '',
     [string]$Title = '',
+    [string]$ReleaseTitle = '',
+    [string]$ReleaseYear = '',
     [string]$CacheDir = ''
 )
 
@@ -23,6 +25,10 @@ function Repair-TextEncoding {
     if ([string]::IsNullOrWhiteSpace($Value)) { return '' }
     $Value = $Value -replace ([string][char]0xfffd + '\??'), ''
     $Value = $Value -replace [string][char]0xfffd, ''
+    $Value = $Value -replace ([string][char]0x00c2 + [char]0x00a0), ' '
+    $Value = $Value -replace [string][char]0x00a0, ' '
+    $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x00a6), '...'
+    $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x00a2), '-'
     $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0099), "'"
     $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0098), "'"
     $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x009c), '"'
@@ -32,6 +38,8 @@ function Repair-TextEncoding {
     $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0092), '-'
     $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0093), '-'
     $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0094), '-'
+    $Value = $Value -replace '[\p{Cc}\p{Cf}]', ' '
+    $Value = $Value -replace '\s+', ' '
     if ($Value.IndexOf([char]0x00c3) -lt 0 -and $Value.IndexOf([char]0x00c2) -lt 0) { return $Value }
     try {
         $bytes = [Text.Encoding]::GetEncoding(1252).GetBytes($Value)
@@ -47,19 +55,60 @@ function Test-KnownArtist {
     return (-not [string]::IsNullOrWhiteSpace($Value) -and $Value.Trim() -ine 'UNKNOWN ARTIST')
 }
 
+function Get-FoldedText {
+    param([string]$Value)
+    if ([string]::IsNullOrWhiteSpace($Value)) { return '' }
+    $text = (Repair-TextEncoding $Value).Normalize('FormD') -replace '\p{Mn}', ''
+    $text = $text.ToLowerInvariant()
+    $text = $text -replace '\bac\s*/?\s*dc\b', 'acdc'
+    $text = $text -replace '\b(ft|feat|featuring|with|and|y|con|x)\b', ' '
+    $text = $text -replace '[^\p{L}\p{Nd}]+', ' '
+    return (($text -replace '\s+', ' ').Trim())
+}
+
+function Test-TextEquivalent {
+    param([string]$Left, [string]$Right)
+    $a = Get-FoldedText $Left
+    $b = Get-FoldedText $Right
+    return (-not [string]::IsNullOrWhiteSpace($a) -and $a -eq $b)
+}
+
 function Remove-TitleNoise {
     param([string]$Value)
     if ([string]::IsNullOrWhiteSpace($Value)) { return '' }
-    $noiseWords = 'official\s+music\s+video|official\s+video|official\s+audio|official\s+lyric\s+video|lyric\s+video|lyrics?|visuali[sz]er|music\s+video|audio|hd|4k|remaster(?:ed)?|karaoke|unreleased\s+video|new\s+unreleased\s+video|new\s+video|video'
+    $noiseWords = 'official\s+music\s+video|official\s+video|official\s+audio|official\s+lyric\s+video|official|lyric\s+video|lyrics?|visuali[sz]er|music\s+video|audio|hd|hq|sd|4k|[0-9]{3,4}p|remaster(?:ed)?|karaoke|unreleased\s+video|new\s+unreleased\s+video|new\s+video|video'
+    $contextNoiseWords = $noiseWords + '|live(?:\s+(?:at|from|in|on)\b.*)?|sub(?:titula[dd][ao]?|itula[dd][ao]?|titulos?)|espanol|ingles|legendado|traducao|translated|translation'
     $clean = Repair-TextEncoding $Value
-    $clean = $clean -replace ('(?i)\s*[\[\(\{][^\]\)\}]*\b(' + $noiseWords + ')\b[^\]\)\}]*[\]\)\}]'), ''
+    $clean = $clean -replace ('(?i)\s*[\[\(\{][^\]\)\}]*\b(' + $contextNoiseWords + ')\b[^\]\)\}]*[\]\)\}]'), ''
     $clean = $clean -replace ('(?i)\s*[\[\(\{][^\]\)\}]*\b(ft\.?|feat\.?|featuring)\b[^\]\)\}]*[\]\)\}]'), ''
-    $clean = $clean -replace ('(?i)\s*[\[\(\{][^\]\)\}]*\b(' + $noiseWords + '|ft\.?|feat\.?|featuring)\b[^\]\)\}]*$'), ''
+    $clean = $clean -replace ('(?i)\s*[\[\(\{][^\]\)\}]*\b(' + $contextNoiseWords + '|ft\.?|feat\.?|featuring)\b[^\]\)\}]*$'), ''
     $clean = $clean -replace '(?i)\s+\b(ft\.?|feat\.?|featuring)\b\.?\s+.*$', ''
-    $clean = $clean -replace ('(?i)\s+[-|:]\s*(' + $noiseWords + ')\b.*$'), ''
+    $clean = $clean -replace ('(?i)\s+[-|:]\s*(' + $contextNoiseWords + ')\b.*$'), ''
+    $clean = $clean -replace ('(?i)\s+\b(live\s+(?:at|from|in|on)\b.*)$'), ''
+    $clean = $clean -replace ('(?i)\s+\b(' + $contextNoiseWords + ')\b.*$'), ''
     $clean = $clean -replace ('(?i)\b(' + $noiseWords + ')\b'), ''
     $clean = $clean -replace '\s+', ' '
-    return $clean.Trim(' ', '-', '|', ':', '.', '_')
+    return $clean.Trim(' ', '-', '|', ':', '_')
+}
+
+function Remove-TitleNoise {
+    param([string]$Value)
+    if ([string]::IsNullOrWhiteSpace($Value)) { return '' }
+    $noiseWords = 'official\s+music\s+video|official\s+video|official\s+audio|official\s+lyric\s+video|official|lyric\s+video|lyrics?|visuali[sz]er|music\s+video|audio|hd|hq|sd|4k|[0-9]{3,4}p|remaster(?:ed)?|karaoke|unreleased\s+video|new\s+unreleased\s+video|new\s+video'
+    $contextNoiseWords = $noiseWords + '|live\s+(?:at|from|in|on)\b.*|sub(?:titula[dd][ao]?|itula[dd][ao]?|titulos?)|espanol|ingles|legendado|traducao|translated|translation'
+    $clean = Repair-TextEncoding $Value
+    $clean = $clean -replace '(?i)\s+\b(with|w/)\s+lyrics?\b.*$', ''
+    $clean = $clean -replace '(?i)\s*[\[\(\{]\s*(tv|mv|hd|hq|sd|4k|[0-9]{3,4}p|live)\s*[\]\)\}]', ''
+    $clean = $clean -replace ('(?i)\s*[\[\(\{][^\]\)\}]*\b(' + $contextNoiseWords + ')\b[^\]\)\}]*[\]\)\}]'), ''
+    $clean = $clean -replace ('(?i)\s*[\[\(\{][^\]\)\}]*\b(ft\.?|feat\.?|featuring)\b[^\]\)\}]*[\]\)\}]'), ''
+    $clean = $clean -replace ('(?i)\s*[\[\(\{][^\]\)\}]*\b(' + $contextNoiseWords + '|ft\.?|feat\.?|featuring)\b[^\]\)\}]*$'), ''
+    $clean = $clean -replace '(?i)\s+\b(ft\.?|feat\.?|featuring)\b\.?\s+.*$', ''
+    $clean = $clean -replace ('(?i)\s+[-|:]\s*(' + $contextNoiseWords + ')\b.*$'), ''
+    $clean = $clean -replace ('(?i)\s+\b(live\s+(?:at|from|in|on)\b.*)$'), ''
+    $clean = $clean -replace ('(?i)\s+\b(' + $contextNoiseWords + ')\b.*$'), ''
+    $clean = $clean -replace ('(?i)\b(' + $noiseWords + ')\b'), ''
+    $clean = $clean -replace '\s+', ' '
+    return $clean.Trim(' ', '-', '|', ':', '_')
 }
 
 function Get-QueryParts {
@@ -71,6 +120,14 @@ function Get-QueryParts {
     if ((-not (Test-KnownArtist $resolvedArtist)) -and $resolvedTitle -match '^\s*(?<artist>[^-|:]+?)\s+[-|:]\s+(?<title>.+?)\s*$') {
         $resolvedArtist = $Matches['artist'].Trim()
         $resolvedTitle = Remove-TitleNoise $Matches['title'].Trim()
+    }
+    if ($resolvedArtist -match '^\s*(?<name>.+?)\s*,\s*(?<article>The|A|An)\s*$') {
+        $resolvedArtist = ('{0} {1}' -f $Matches['article'], $Matches['name'])
+    }
+    if ($resolvedArtist -match '(?i)^\s*AC\s*/?\s*DC\s*$') { $resolvedArtist = 'AC/DC' }
+    if ($resolvedArtist -match '(?i)^\s*DESTINYS\s+CHILD\s*$') { $resolvedArtist = "Destiny's Child" }
+    if ($resolvedArtist -match '^\s*(?<thousands>\d{1,2})\s+(?<hundreds>\d{3})(?<rest>\s+\S.*)$') {
+        $resolvedArtist = ('{0},{1}{2}' -f $Matches['thousands'], $Matches['hundreds'], $Matches['rest'])
     }
 
     return @{ Artist = $resolvedArtist; Title = $resolvedTitle }
@@ -91,8 +148,10 @@ function Get-PrimaryArtistName {
     if ([string]::IsNullOrWhiteSpace($Value)) { return '' }
     $primary = $Value
     $primary = $primary -replace '(?i)\s+(\(|\[)?\s*(ft\.?|feat\.?|featuring|with)\s+.*$', ''
+    $primary = $primary -replace '\s*,\s+.*$', ''
     $primary = $primary -replace '(?i)\s+&\s+.*$', ''
     $primary = $primary -replace '(?i)\s+x\s+.*$', ''
+    $primary = $primary -replace '(?i)\s+(y|con)\s+.*$', ''
     $primary = $primary.Trim(' ', '-', '|', ':', '.', '_', '(', '[', ')', ']')
     return $primary
 }
@@ -116,6 +175,7 @@ function Find-ArtistMbidByName {
             Sort-Object @{ Expression = {
                 $score = [int]($_.score -as [int])
                 if ([string]$_.name -ieq $Name) { $score += 100 }
+                elseif (Test-TextEquivalent ([string]$_.name) $Name) { $score += 80 }
                 if ([string]$_.type -ieq 'Group') { $score += 20 }
                 $score
             }; Descending = $true } |
@@ -167,8 +227,8 @@ function Get-ReleaseScore {
     elseif (-not [string]::IsNullOrWhiteSpace($status)) { $score += 20 }
 
     switch -Regex ($primaryType) {
-        '^(Single)$' { $score += 260; break }
-        '^(Album)$' { $score += 230; break }
+        '^(Album)$' { $score += 390; break }
+        '^(Single)$' { $score += 170; break }
         '^(EP)$' { $score += 200; break }
         default { $score += 20; break }
     }
@@ -180,11 +240,19 @@ function Get-ReleaseScore {
     if (Test-PlaylistLikeTitle $title) { $score -= 450 }
     if (Test-PlaylistLikeTitle ([string]$group.title)) { $score -= 450 }
     if (Test-PlaylistLikeTitle $disambiguation) { $score -= 250 }
-    if ($title -ieq $recordingTitle) { $score += 90 }
-    elseif ($title -match ('(?i)^' + [regex]::Escape($recordingTitle) + '\s*[\(\[]')) { $score += 70 }
-    elseif ($primaryType -ieq 'Single' -and $title -match ('(?i)' + [regex]::Escape($recordingTitle))) { $score += 45 }
+    $releaseTitleMatchesRecording = $false
+    if ($title -ieq $recordingTitle) { $score += 90; $releaseTitleMatchesRecording = $true }
+    elseif ($title -match ('(?i)^' + [regex]::Escape($recordingTitle) + '\s*[\(\[]')) { $score += 70; $releaseTitleMatchesRecording = $true }
+    elseif ($primaryType -ieq 'Single' -and $title -match ('(?i)' + [regex]::Escape($recordingTitle))) { $score += 45; $releaseTitleMatchesRecording = $true }
+    if ($primaryType -ieq 'Single' -and -not $releaseTitleMatchesRecording) { $score -= 320 }
     if ([string]$Release.date -match '^\d{4}(-\d{2})?(-\d{2})?$') { $score += 60 }
     else { $score -= 25 }
+    if (-not [string]::IsNullOrWhiteSpace($ReleaseYear) -and [string]$Release.date -match '^(?<year>(19|20)\d{2})') {
+        $delta = [Math]::Abs(([int]$Matches['year']) - ([int]$ReleaseYear))
+        if ($delta -eq 0) { $score += 260 }
+        elseif ($delta -le 1) { $score += 80 }
+        elseif ($delta -gt 8) { $score -= 120 }
+    }
     if ($Release.'track-count' -and [int]$Release.'track-count' -le 6) { $score += 35 }
     if ($Release.'track-count' -and [int]$Release.'track-count' -gt 40) { $score -= 40 }
 
@@ -272,6 +340,7 @@ function Find-DirectCoverRelease {
                     $groupArtist = Get-ArtistCreditName -Recording $_
                     if (Test-KnownArtist $ArtistValue) {
                         if ($groupArtist -ieq $ArtistValue) { $score += 180 }
+                        elseif (Test-TextEquivalent $groupArtist $ArtistValue) { $score += 165 }
                         elseif ($groupArtist -match ('(?i)' + [regex]::Escape($ArtistValue))) { $score += 45 }
                         else { $score -= 500 }
                     }
@@ -279,14 +348,20 @@ function Find-DirectCoverRelease {
                     elseif ([string]$_.title -match ('(?i)^' + [regex]::Escape($TitleValue) + '\s*[\(\[]')) { $score += 180 }
                     elseif ([string]$_.title -match ('(?i)' + [regex]::Escape($TitleValue))) { $score += 70 }
                     switch -Regex ([string]$_.'primary-type') {
-                        '^(Single)$' { $score += 240; break }
-                        '^(Album)$' { $score += 160; break }
-                        '^(EP)$' { $score += 120; break }
+                        '^(Album)$' { $score += 390; break }
+                        '^(EP)$' { $score += 200; break }
+                        '^(Single)$' { $score += 170; break }
                     }
                     foreach ($secondaryType in @($_.'secondary-types')) {
                         if ([string]$secondaryType -match '(?i)Compilation|Soundtrack|Live|DJ-mix|Mixtape/Street|Remix') { $score -= 350 }
                     }
                     if ([string]$_.'first-release-date' -match '^\d{4}(-\d{2})?(-\d{2})?$') { $score += 35 }
+                    if (-not [string]::IsNullOrWhiteSpace($ReleaseYear) -and [string]$_.'first-release-date' -match '^(?<year>(19|20)\d{2})') {
+                        $delta = [Math]::Abs(([int]$Matches['year']) - ([int]$ReleaseYear))
+                        if ($delta -eq 0) { $score += 240 }
+                        elseif ($delta -le 1) { $score += 70 }
+                        elseif ($delta -gt 8) { $score -= 100 }
+                    }
                     $score
                 }; Descending = $true } |
                 Select-Object -First 1
@@ -307,12 +382,17 @@ function Find-DirectCoverRelease {
 }
 
 function Write-MetadataResult {
-    param($Recording, [hashtable]$Headers, [string]$ArtistValue, [string]$TitleValue)
+    param($Recording, [hashtable]$Headers, [string]$ArtistValue, [string]$TitleValue, $PreferredRelease = $null, [string]$PreferredReleaseSource = '')
 
     $release = Select-BestRelease -Recording $Recording
     $directRelease = $null
-    if (Test-WeakCoverRelease -Release $release) {
+    $directReleaseSource = ''
+    if ($PreferredRelease) {
+        $directRelease = $PreferredRelease
+        $directReleaseSource = $PreferredReleaseSource
+    } elseif (Test-WeakCoverRelease -Release $release) {
         $directRelease = Find-DirectCoverRelease -ArtistValue $ArtistValue -TitleValue $TitleValue -Headers $Headers
+        $directReleaseSource = 'title'
     }
     $result = [ordered]@{
         Artist = Get-ArtistCreditName -Recording $Recording
@@ -320,6 +400,7 @@ function Write-MetadataResult {
         ReleaseTitle = ''
         ReleaseDate = ''
         ReleaseMbid = ''
+        ReleaseMatchSource = ''
         ArtistMbid = Get-PreferredArtistMbid -Recording $Recording -Headers $Headers
         RecordingMbid = [string]$Recording.id
     }
@@ -327,11 +408,29 @@ function Write-MetadataResult {
         $result.ReleaseTitle = Repair-TextEncoding ([string]$release.title)
         $result.ReleaseDate = [string]$release.date
         $result.ReleaseMbid = [string]$release.id
+        $result.ReleaseMatchSource = 'recording'
     }
     if ($directRelease) {
         $result.ReleaseTitle = [string]$directRelease.title
         $result.ReleaseDate = [string]$directRelease.date
         $result.ReleaseMbid = [string]$directRelease.id
+        $result.ReleaseMatchSource = $directReleaseSource
+    }
+    $result | ConvertTo-Json -Depth 5 -Compress
+}
+
+function Write-DirectReleaseMetadataResult {
+    param([string]$ArtistValue, [string]$TitleValue, $Release, [string]$ReleaseSource = '')
+
+    $result = [ordered]@{
+        Artist = Repair-TextEncoding $ArtistValue
+        Title = Repair-TextEncoding $TitleValue
+        ReleaseTitle = Repair-TextEncoding ([string]$Release.title)
+        ReleaseDate = [string]$Release.date
+        ReleaseMbid = [string]$Release.id
+        ReleaseMatchSource = $ReleaseSource
+        ArtistMbid = ''
+        RecordingMbid = ''
     }
     $result | ConvertTo-Json -Depth 5 -Compress
 }
@@ -344,8 +443,7 @@ function Get-RecordingScore {
     if ($recordingTitle -ieq $TitleValue.Trim()) { $score += 200 }
     elseif ($recordingTitle -match ('(?i)^' + [regex]::Escape($TitleValue.Trim()) + '\s*[\(\[]')) { $score += 50 }
     elseif ($recordingTitle -match ('(?i)' + [regex]::Escape($TitleValue.Trim()))) { $score += 20 }
-
-    $variantWords = 'instrumental|acoustic|karaoke|tribute|cover|remix|live|sped\s+up|slowed|nightcore|making\s+of|behind\s+the\s+scenes|interview|commentary'
+    $variantWords = 'instrumental|acoustic|karaoke|tribute|cover|remix|live|sub(?:titula[dd][ao]?|itula[dd][ao]?|titulos?)|espanol|ingles|legendado|traducao|translated|translation|sped\s+up|slowed|nightcore|making\s+of|behind\s+the\s+scenes|interview|commentary'
     if (($recordingTitle -match ('(?i)\b(' + $variantWords + ')\b')) -and ($TitleValue -notmatch ('(?i)\b(' + $variantWords + ')\b'))) {
         $score -= 500
     }
@@ -354,24 +452,35 @@ function Get-RecordingScore {
     $primaryArtist = Get-PrimaryArtistName -Value $ArtistValue
     if (Test-KnownArtist $ArtistValue) {
         if ($artistCredit -ieq $ArtistValue) { $score += 160 }
+        elseif (Test-TextEquivalent $artistCredit $ArtistValue) { $score += 145 }
         elseif ($artistCredit -match ('(?i)' + [regex]::Escape($ArtistValue))) { $score += 40 }
         else { $score -= 300 }
     }
     if (Test-KnownArtist $primaryArtist) {
         if ($artistCredit -ieq $primaryArtist) { $score += 140 }
+        elseif (Test-TextEquivalent $artistCredit $primaryArtist) { $score += 125 }
         elseif ($artistCredit -match ('(?i)' + [regex]::Escape($primaryArtist))) { $score += 35 }
         else { $score -= 500 }
     }
-    $requestedHasCollab = ($ArtistValue -match '(?i)\b(ft\.?|feat\.?|featuring|with)\b|&|\sx\s')
+    $requestedHasCollab = ($ArtistValue -match '(?i)\b(ft\.?|feat\.?|featuring|with)\b|&|\sx\s|,')
     if (-not $requestedHasCollab -and $artistCredit -match '\s&\s') { $score -= 90 }
-    if (@($Recording.releases).Count -gt 0) { $score += 10 }
-    if (@($Recording.releases).Count -gt 0) {
+    $releaseCount = @($Recording.releases).Count
+    if ($releaseCount -gt 0) {
+        $score += 10
+        $score += [Math]::Min(520, [int](80 * [Math]::Log($releaseCount + 1, 2)))
         $bestReleaseScore = @($Recording.releases | ForEach-Object { Get-ReleaseScore -Release $_ -Recording $Recording } | Sort-Object -Descending | Select-Object -First 1)
         if ($bestReleaseScore.Count -gt 0) { $score += [int]([double]$bestReleaseScore[0] / 3.0) }
     }
     if ([string]$Recording.'first-release-date' -match '^\d{4}(-\d{2})?(-\d{2})?$') { $score += 35 }
     if (@($Recording.releases | Where-Object { [string]$_.date -match '^\d{4}(-\d{2})?(-\d{2})?$' }).Count -gt 0) { $score += 25 }
     else { $score -= 30 }
+    if (-not [string]::IsNullOrWhiteSpace($ReleaseYear)) {
+        $yearMatches = @($Recording.releases | Where-Object { [string]$_.date -match ('^' + [regex]::Escape($ReleaseYear)) })
+        if ($yearMatches.Count -gt 0) { $score += 190 }
+        elseif ([string]$Recording.'first-release-date' -match '^(?<year>(19|20)\d{2})') {
+            if ([Math]::Abs(([int]$Matches['year']) - ([int]$ReleaseYear)) -gt 8) { $score -= 100 }
+        }
+    }
     if ([string]$Recording.disambiguation -match '(?i)\b(live|karaoke|tribute|cover|remix|acoustic|instrumental)\b') { $score -= 260 }
     if (@($Recording.releases | Where-Object { -not (Test-PlaylistLikeTitle ([string]$_.title)) -and -not (Test-PlaylistLikeTitle ([string]$_.'release-group'.title)) }).Count -gt 0) { $score += 30 }
 
@@ -390,7 +499,7 @@ function Find-Recording {
             $queries.Add('artist:"' + $primaryArtist.Replace('"','') + '" AND recording:"' + $safeTitle + '"')
         }
     }
-    if (-not (Test-KnownArtist $ArtistValue)) {
+    if (-not $queries.Contains('recording:"' + $safeTitle + '"')) {
         $queries.Add('recording:"' + $safeTitle + '"')
     }
 
@@ -425,10 +534,14 @@ $queryParts = Get-QueryParts -ArtistValue $Artist -TitleValue $Title
 $Artist = $queryParts['Artist']
 $Title = $queryParts['Title']
 if ([string]::IsNullOrWhiteSpace($Title) -or [string]::IsNullOrWhiteSpace($CacheDir)) { return }
+$ReleaseTitle = Remove-TitleNoise $ReleaseTitle
+if ($ReleaseYear -notmatch '^(19|20)\d{2}$') { $ReleaseYear = '' }
 
 New-Item -ItemType Directory -Path $CacheDir -Force | Out-Null
 $cachePrefix = if (Test-KnownArtist $Artist) { $Artist } else { 'unknown_artist' }
-$cacheKey = Get-SafeCacheName ('v17 - ' + $cachePrefix + ' - ' + $Title)
+$cacheRelease = if ([string]::IsNullOrWhiteSpace($ReleaseTitle)) { 'no_release' } else { $ReleaseTitle }
+$cacheYear = if ([string]::IsNullOrWhiteSpace($ReleaseYear)) { 'no_year' } else { $ReleaseYear }
+$cacheKey = Get-SafeCacheName ('v25 - ' + $cachePrefix + ' - ' + $Title + ' - ' + $cacheRelease + ' - ' + $cacheYear)
 $cachePath = Join-Path $CacheDir ($cacheKey + '.metadata.json')
 $missPath = Join-Path $CacheDir ($cacheKey + '.metadata.miss')
 
@@ -438,18 +551,28 @@ if (Test-Path -LiteralPath $cachePath) {
 }
 if (Test-Path -LiteralPath $missPath) { return }
 
-$headers = @{ 'User-Agent' = 'JukeboxDownloadWizard/0.2.3.2 ( https://musicbrainz.org/ )' }
-
+$headers = @{ 'User-Agent' = 'JukeboxDownloadWizard/0.3.0.0 ( https://musicbrainz.org/ )' }
+$preferredRelease = $null
+if (-not [string]::IsNullOrWhiteSpace($ReleaseTitle)) {
+    $preferredRelease = Find-DirectCoverRelease -ArtistValue $Artist -TitleValue $ReleaseTitle -Headers $headers
+}
 try {
     $recording = Find-Recording -ArtistValue $Artist -TitleValue $Title -Headers $headers
     if ($recording) {
-        $json = Write-MetadataResult -Recording $recording -Headers $headers -ArtistValue $Artist -TitleValue $Title
+        $json = Write-MetadataResult -Recording $recording -Headers $headers -ArtistValue $Artist -TitleValue $Title -PreferredRelease $preferredRelease -PreferredReleaseSource 'release_tag'
         Set-Content -LiteralPath $cachePath -Value $json -Encoding UTF8
         Write-Output $json
         return
     }
 }
 catch {
+}
+
+if ($preferredRelease) {
+    $json = Write-DirectReleaseMetadataResult -ArtistValue $Artist -TitleValue $Title -Release $preferredRelease -ReleaseSource 'release_tag'
+    Set-Content -LiteralPath $cachePath -Value $json -Encoding UTF8
+    Write-Output $json
+    return
 }
 
 Set-Content -LiteralPath $missPath -Value ((Get-Date).ToString('s')) -Encoding ASCII

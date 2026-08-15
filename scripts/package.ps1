@@ -1,4 +1,4 @@
-﻿param(
+param(
     [string]$Version = '',
     [ValidateSet('', 'major', 'minor', 'patch', 'build')][string]$Bump = '',
     [switch]$NoBuild,
@@ -141,7 +141,16 @@ function Clear-PackageRuntimeData {
     )
     foreach ($path in $runtimePaths) {
         if (Test-Path -LiteralPath $path) {
-            Remove-Item -LiteralPath $path -Recurse -Force
+            try {
+                Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction Stop
+            } catch {
+                Start-Sleep -Milliseconds 250
+                try {
+                    Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction Stop
+                } catch {
+                    Write-Warning "Could not fully clear runtime package data at $path. Close JDW or image viewers if this should be removed locally. Locked files are ignored for packaging."
+                }
+            }
         }
     }
 }

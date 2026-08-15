@@ -2,7 +2,8 @@ param(
     [string]$Artist = '',
     [string]$Title = '',
     [string]$CacheDir = '',
-    [string]$ReleaseMbid = ''
+    [string]$ReleaseMbid = '',
+    [string]$ReleaseTitle = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -19,7 +20,7 @@ function Get-SafeCacheName {
 
 function Invoke-MusicBrainzJson {
     param([string]$Url)
-    $headers = @{ 'User-Agent' = 'JukeboxDownloadWizard/0.2.3.2 ( https://musicbrainz.org/ )' }
+$headers = @{ 'User-Agent' = 'JukeboxDownloadWizard/0.3.0.0 ( https://musicbrainz.org/ )' }
     return Invoke-RestMethod -Uri $Url -Headers $headers -TimeoutSec 12
 }
 
@@ -52,6 +53,13 @@ function Get-AlbumQueryParts {
         $resolvedArtist = $Matches['artist'].Trim()
         $resolvedTitle = $Matches['title'].Trim()
     }
+    if ($resolvedArtist -match '^\s*(?<name>.+?)\s*,\s*(?<article>The|A|An)\s*$') {
+        $resolvedArtist = ('{0} {1}' -f $Matches['article'], $Matches['name'])
+    }
+    if ($resolvedArtist -match '(?i)^\s*DESTINYS\s+CHILD\s*$') { $resolvedArtist = "Destiny's Child" }
+    if ($resolvedArtist -match '^\s*(?<thousands>\d{1,2})\s+(?<hundreds>\d{3})(?<rest>\s+\S.*)$') {
+        $resolvedArtist = ('{0},{1}{2}' -f $Matches['thousands'], $Matches['hundreds'], $Matches['rest'])
+    }
 
     return @{ Artist = $resolvedArtist; Title = $resolvedTitle }
 }
@@ -70,6 +78,98 @@ function Try-DownloadCover {
     return $false
 }
 
+function Try-DownloadReleaseGroupCover {
+    param([string]$ReleaseGroupId, [string]$OutputPath)
+    if ([string]::IsNullOrWhiteSpace($ReleaseGroupId)) { return $false }
+    $url = 'https://coverartarchive.org/release-group/' + $ReleaseGroupId + '/front-500'
+    try {
+        Invoke-WebRequest -Uri $url -OutFile $OutputPath -TimeoutSec 20 -MaximumRedirection 5 -UseBasicParsing | Out-Null
+        if ((Test-Path -LiteralPath $OutputPath) -and ((Get-Item -LiteralPath $OutputPath).Length -gt 0) -and (Test-ImageFile -Path $OutputPath)) { return $true }
+    }
+    catch {
+    }
+    if (Test-Path -LiteralPath $OutputPath) { Remove-Item -LiteralPath $OutputPath -Force -ErrorAction SilentlyContinue }
+    return $false
+}
+
+function Get-NormalizedText {
+    param([string]$Value)
+    if ([string]::IsNullOrWhiteSpace($Value)) { return '' }
+    $text = $Value.Normalize('FormD') -replace '\p{Mn}', ''
+    $text = $text.ToLowerInvariant()
+    $text = $text -replace '\bac\s*/?\s*dc\b', 'acdc'
+    $text = $text -replace '\b(ft|feat|featuring|with|and|y|con|x)\b', ' '
+    $text = $text -replace '[^\p{L}\p{Nd}]+', ' '
+    $text = $text -replace '\s+', ' '
+    return $text.Trim()
+}
+
+function Get-AppleArtworkUrl {
+    param([string]$ArtistValue, [string]$ReleaseTitleValue, [string]$TitleValue)
+
+    $searchTitle = if (-not [string]::IsNullOrWhiteSpace($ReleaseTitleValue)) { $ReleaseTitleValue } else { $TitleValue }
+    if ([string]::IsNullOrWhiteSpace($searchTitle)) { return '' }
+
+    $term = if (Test-KnownArtist $ArtistValue) { ($ArtistValue + ' ' + $searchTitle) } else { $searchTitle }
+    $url = 'https://itunes.apple.com/search?term=' + [uri]::EscapeDataString($term) + '&entity=album&limit=8'
+    try {
+        $result = Invoke-RestMethod -Uri $url -TimeoutSec 12
+        $targetArtist = Get-NormalizedText $ArtistValue
+        $targetRelease = Get-NormalizedText $searchTitle
+        $targetTitle = Get-NormalizedText $TitleValue
+        $best = @($result.results) |
+            Where-Object { $_.artworkUrl100 -and $_.collectionName } |
+            Sort-Object @{ Expression = {
+                $score = 0
+                $artistName = Get-NormalizedText ([string]$_.artistName)
+                $collectionName = Get-NormalizedText ([string]$_.collectionName)
+                if ($targetArtist -and $artistName -eq $targetArtist) { $score += 300 }
+                elseif ($targetArtist -and $artistName -match [regex]::Escape($targetArtist)) { $score += 120 }
+                elseif ($targetArtist) { $score -= 300 }
+                if ($targetRelease -and $collectionName -eq $targetRelease) { $score += 300 }
+                elseif ($targetRelease -and $collectionName -match [regex]::Escape($targetRelease)) { $score += 140 }
+                elseif ($targetTitle -and $collectionName -match [regex]::Escape($targetTitle)) { $score += 80 }
+                if ($collectionName -match '\bsingle\b') { $score -= 120 }
+                $score
+            }; Descending = $true } |
+            Select-Object -First 1
+        if ($best -and $best.artworkUrl100) {
+            return ([string]$best.artworkUrl100) -replace '/\d+x\d+bb\.', '/1000x1000bb.'
+        }
+    }
+    catch {
+    }
+    return ''
+}
+
+function Try-DownloadAppleArtwork {
+    param([string]$ArtistValue, [string]$ReleaseTitleValue, [string]$TitleValue, [string]$OutputPath)
+
+    $artworkUrl = Get-AppleArtworkUrl -ArtistValue $ArtistValue -ReleaseTitleValue $ReleaseTitleValue -TitleValue $TitleValue
+    if ([string]::IsNullOrWhiteSpace($artworkUrl)) { return $false }
+    try {
+        Invoke-WebRequest -Uri $artworkUrl -OutFile $OutputPath -TimeoutSec 20 -MaximumRedirection 5 -UseBasicParsing | Out-Null
+        if ((Test-Path -LiteralPath $OutputPath) -and ((Get-Item -LiteralPath $OutputPath).Length -gt 0) -and (Test-ImageFile -Path $OutputPath)) { return $true }
+    }
+    catch {
+    }
+    if (Test-Path -LiteralPath $OutputPath) { Remove-Item -LiteralPath $OutputPath -Force -ErrorAction SilentlyContinue }
+    return $false
+}
+
+function Get-ReleaseGroupId {
+    param([string]$ReleaseId)
+    if ([string]::IsNullOrWhiteSpace($ReleaseId)) { return '' }
+    try {
+        $url = 'https://musicbrainz.org/ws/2/release/' + $ReleaseId + '?inc=release-groups&fmt=json'
+        $release = Invoke-MusicBrainzJson -Url $url
+        if ($release.'release-group'.id) { return [string]$release.'release-group'.id }
+    }
+    catch {
+    }
+    return ''
+}
+
 $queryParts = Get-AlbumQueryParts -ArtistValue $Artist -TitleValue $Title
 $Artist = $queryParts['Artist']
 $Title = $queryParts['Title']
@@ -77,7 +177,7 @@ if (([string]::IsNullOrWhiteSpace($Title) -and [string]::IsNullOrWhiteSpace($Rel
 
 New-Item -ItemType Directory -Path $CacheDir -Force | Out-Null
 $cachePrefix = if (Test-KnownArtist $Artist) { $Artist } else { 'unknown_artist' }
-$cacheKeySource = if (-not [string]::IsNullOrWhiteSpace($ReleaseMbid)) { 'release - ' + $ReleaseMbid } else { $cachePrefix + ' - ' + $Title }
+$cacheKeySource = if (-not [string]::IsNullOrWhiteSpace($ReleaseMbid)) { 'release-v4 - ' + $ReleaseMbid } else { 'title-v2 - ' + $cachePrefix + ' - ' + $Title + ' - ' + $ReleaseTitle }
 $cacheKey = Get-SafeCacheName $cacheKeySource
 $coverPath = Join-Path $CacheDir ($cacheKey + '.jpg')
 $missPath = Join-Path $CacheDir ($cacheKey + '.miss')
@@ -93,6 +193,15 @@ if (Test-Path -LiteralPath $missPath) { return }
 
 if (-not [string]::IsNullOrWhiteSpace($ReleaseMbid)) {
     if (Try-DownloadCover -ReleaseId $ReleaseMbid -OutputPath $coverPath) {
+        Write-Output $coverPath
+        return
+    }
+    $releaseGroupId = Get-ReleaseGroupId -ReleaseId $ReleaseMbid
+    if (Try-DownloadReleaseGroupCover -ReleaseGroupId $releaseGroupId -OutputPath $coverPath) {
+        Write-Output $coverPath
+        return
+    }
+    if (Try-DownloadAppleArtwork -ArtistValue $Artist -ReleaseTitleValue $ReleaseTitle -TitleValue $Title -OutputPath $coverPath) {
         Write-Output $coverPath
         return
     }
@@ -127,6 +236,11 @@ try {
     }
 }
 catch {
+}
+
+if (Try-DownloadAppleArtwork -ArtistValue $Artist -ReleaseTitleValue $ReleaseTitle -TitleValue $Title -OutputPath $coverPath) {
+    Write-Output $coverPath
+    return
 }
 
 Set-Content -LiteralPath $missPath -Value ((Get-Date).ToString('s')) -Encoding ASCII

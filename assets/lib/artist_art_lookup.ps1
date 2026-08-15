@@ -3,7 +3,8 @@ param(
     [string]$Artist = '',
     [string]$CacheDir = '',
     [string]$ProjectKeyPath = '',
-    [string]$PersonalKeyPath = ''
+    [string]$PersonalKeyPath = '',
+    [ValidateSet('Image','Logo')][string]$AssetType = 'Image'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -52,9 +53,13 @@ function Save-ImageFromUrl {
 }
 
 function Get-FanartUrls {
-    param($FanartJson)
+    param($FanartJson, [string]$AssetType = 'Image')
 
-    $priority = @('artistthumb', 'hdmusiclogo', 'musiclogo', 'artistbackground', 'musicbanner')
+    $priority = if ($AssetType -eq 'Logo') {
+        @('hdmusiclogo', 'musiclogo', 'musicbanner')
+    } else {
+        @('artistthumb', 'artistbackground', 'musicbanner', 'hdmusiclogo', 'musiclogo')
+    }
     $urls = New-Object System.Collections.Generic.List[string]
     foreach ($propertyName in $priority) {
         $items = @($FanartJson.PSObject.Properties[$propertyName].Value)
@@ -69,7 +74,7 @@ function Get-FanartUrls {
 }
 
 function Get-FanartImage {
-    param([string]$Mbid, [string]$OutputPrefix)
+    param([string]$Mbid, [string]$OutputPrefix, [string]$AssetType = 'Image')
     $projectKey = Get-TextFileValue -Path $ProjectKeyPath
     if ([string]::IsNullOrWhiteSpace($projectKey)) { return $false }
 
@@ -82,10 +87,11 @@ function Get-FanartImage {
     try {
         $headers = @{ 'User-Agent' = 'JukeboxDownloadWizard/0.2.1.1' }
         $fanart = Invoke-RestMethod -Uri $url -Headers $headers -TimeoutSec 20
-        $imageUrls = @(Get-FanartUrls -FanartJson $fanart)
+        $imageUrls = @(Get-FanartUrls -FanartJson $fanart -AssetType $AssetType)
         $saved = 0
         for ($i = 0; $i -lt $imageUrls.Count; $i++) {
-            $outputPath = '{0}_fanart_{1:00}.jpg' -f $OutputPrefix, ($i + 1)
+            $ext = if ($AssetType -eq 'Logo') { 'png' } else { 'jpg' }
+            $outputPath = '{0}_{1}_{2:00}.{3}' -f $OutputPrefix, $AssetType.ToLowerInvariant(), ($i + 1), $ext
             if (Save-ImageFromUrl -Url $imageUrls[$i] -OutputPath $outputPath) { $saved++ }
             if ($saved -ge 8) { break }
         }
@@ -140,21 +146,28 @@ function Get-WikimediaImage {
 if ([string]::IsNullOrWhiteSpace($ArtistMbid) -or [string]::IsNullOrWhiteSpace($CacheDir)) { return }
 New-Item -ItemType Directory -Path $CacheDir -Force | Out-Null
 
-$cacheName = Get-SafeCacheName (($ArtistMbid + ' ' + $Artist).Trim())
+$cacheName = Get-SafeCacheName (($ArtistMbid + ' ' + $Artist + ' ' + $AssetType).Trim())
 $imagePrefix = Join-Path $CacheDir $cacheName
 $imagePath = Join-Path $CacheDir ($cacheName + '_wikimedia.jpg')
 $missPath = Join-Path $CacheDir ($cacheName + '.miss')
 
-$cachedImages = @(Get-ChildItem -LiteralPath $CacheDir -File -Filter ($cacheName + '_*.jpg') -ErrorAction SilentlyContinue | Where-Object { Test-ImageFile -Path $_.FullName })
+$cachedImages = @(Get-ChildItem -LiteralPath $CacheDir -File -Filter ($cacheName + '_*.*') -ErrorAction SilentlyContinue | Where-Object { Test-ImageFile -Path $_.FullName })
 if ($cachedImages.Count -gt 0) {
     Write-Output (($cachedImages | Get-Random).FullName)
     return
 }
 if (Test-Path -LiteralPath $missPath) { return }
 
-if (Get-FanartImage -Mbid $ArtistMbid -OutputPrefix $imagePrefix) {
-    $cachedImages = @(Get-ChildItem -LiteralPath $CacheDir -File -Filter ($cacheName + '_*.jpg') -ErrorAction SilentlyContinue | Where-Object { Test-ImageFile -Path $_.FullName })
-    if ($cachedImages.Count -gt 0) { Write-Output (($cachedImages | Get-Random).FullName) }
+if (Get-FanartImage -Mbid $ArtistMbid -OutputPrefix $imagePrefix -AssetType $AssetType) {
+    $cachedImages = @(Get-ChildItem -LiteralPath $CacheDir -File -Filter ($cacheName + '_*.*') -ErrorAction SilentlyContinue | Where-Object { Test-ImageFile -Path $_.FullName })
+    if ($cachedImages.Count -gt 0) {
+        Write-Output (($cachedImages | Get-Random).FullName)
+    }
+    return
+}
+
+if ($AssetType -eq 'Logo') {
+    Set-Content -LiteralPath $missPath -Value ((Get-Date).ToString('s')) -Encoding ASCII
     return
 }
 

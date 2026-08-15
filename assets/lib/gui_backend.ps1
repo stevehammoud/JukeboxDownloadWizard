@@ -14,7 +14,8 @@ param(
     [string]$DownloadMediaType = 'Video',
     [string]$NormalizeAudio = 'false',
     [string]$GenerateStandardMarquee = 'false',
-    [string]$GenerateFullColorMarquee = 'false'
+    [string]$GenerateFullColorMarquee = 'false',
+    [string]$GenerateVideoMarquee = 'false'
 )
 
 $Root = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
@@ -48,13 +49,14 @@ $MaxSourceLimit = 500
 $MinDurationSeconds = if ($MinSeconds -ge 0) { [Math]::Max(0, $MinSeconds) } else { [Math]::Max(0, $MinMinutes * 60) }
 $MaxDurationSeconds = if ($MaxSeconds -ge 0) { [Math]::Max(30, $MaxSeconds) } else { [Math]::Max(60, $MaxMinutes * 60) }
 if ($MinDurationSeconds -gt $MaxDurationSeconds) { $MinDurationSeconds = $MaxDurationSeconds }
-$FileNameTotalLimit = 75
+$FileNameTotalLimit = 97
 $Processes = 4
 $Height = $Resolution
 $DownloadAudioOnly = $DownloadMediaType -eq 'Audio'
 $NormalizeAudioEnabled = $NormalizeAudio -match '^(1|true|yes|on)$'
 $GenerateStandardMarqueeEnabled = $GenerateStandardMarquee -match '^(1|true|yes|on)$'
 $GenerateFullColorMarqueeEnabled = $GenerateFullColorMarquee -match '^(1|true|yes|on)$'
+$GenerateVideoMarqueeEnabled = $GenerateVideoMarquee -match '^(1|true|yes|on)$'
 $VideoCodec = 'avc1'
 $AudioExt = 'm4a'
 $VideoExt = 'mp4'
@@ -514,18 +516,104 @@ function Get-DownloadFileSnapshot {
     $snapshot = @{}
     Get-ChildItem -LiteralPath $DownloadDir -File -Recurse -Force -ErrorAction SilentlyContinue |
         Where-Object { $_.FullName -notlike "$(Join-Path $DownloadDir 'discard')*" } |
-        ForEach-Object { $snapshot[$_.FullName] = $true }
+        ForEach-Object { $snapshot[$_.FullName] = Get-DownloadFileStamp -File $_ }
     return $snapshot
+}
+
+function Get-DownloadFileStamp {
+    param([System.IO.FileInfo]$File)
+
+    return ("{0}|{1}" -f $File.Length, $File.LastWriteTimeUtc.Ticks)
 }
 
 function Get-NewDownloadFiles {
     param([hashtable]$Before)
 
+    $downloadRoot = (Resolve-Path -LiteralPath $DownloadDir).Path.TrimEnd('\')
     return @(Get-ChildItem -LiteralPath $DownloadDir -File -Recurse -Force -ErrorAction SilentlyContinue |
         Where-Object {
-            $_.FullName -notlike "$(Join-Path $DownloadDir 'discard')*" -and
-            -not $Before.ContainsKey($_.FullName)
+            $_.DirectoryName.TrimEnd('\') -ieq $downloadRoot -and
+            ((-not $Before.ContainsKey($_.FullName)) -or ($Before[$_.FullName] -ne (Get-DownloadFileStamp -File $_)))
         })
+}
+
+function Get-NormalizedMarqueeBaseName {
+    param([string]$Path)
+
+    $originalName = [IO.Path]::GetFileNameWithoutExtension($Path)
+    $name = $originalName -replace '\s+\(JUKE\)$', ''
+    if ([string]::IsNullOrWhiteSpace($name)) { return $originalName }
+    return $name
+}
+
+function Get-UniqueMarqueeVideoFiles {
+    param([object[]]$Files)
+
+    $seen = @{}
+    $unique = @()
+    foreach ($file in @($Files)) {
+        if ($null -eq $file) { continue }
+        $key = (Get-NormalizedMarqueeBaseName -Path $file.FullName).ToUpperInvariant()
+        if ($seen.ContainsKey($key)) {
+            Write-Host ("Skipping duplicate marquee source for {0}: {1}" -f $key, $file.FullName)
+            continue
+        }
+        $seen[$key] = $true
+        $unique += $file
+    }
+    return @($unique)
+}
+
+function Get-UniqueMarqueeVideoPaths {
+    param([string[]]$Files)
+
+    $seen = @{}
+    $unique = @()
+    foreach ($file in @($Files)) {
+        if ([string]::IsNullOrWhiteSpace($file)) { continue }
+        $key = (Get-NormalizedMarqueeBaseName -Path $file).ToUpperInvariant()
+        if ($seen.ContainsKey($key)) {
+            Write-Host ("Skipping duplicate marquee source for {0}: {1}" -f $key, $file)
+            continue
+        }
+        $seen[$key] = $true
+        $unique += $file
+    }
+    return @($unique)
+}
+
+function Get-SelectedMarqueeTypeNames {
+    $types = @()
+    if ($GenerateStandardMarqueeEnabled) { $types += 'Standard' }
+    if ($GenerateFullColorMarqueeEnabled) { $types += 'Full Color' }
+    if ($GenerateVideoMarqueeEnabled) { $types += 'Animated' }
+    return @($types)
+}
+
+function Write-MarqueeTypesStart {
+    param(
+        [string]$Title,
+        [string[]]$Types
+    )
+
+    if ($Types.Count -eq 0) { return }
+    $message = "Generating marquee types: {0} for {1}" -f ([string]::Join(', ', $Types)), $Title
+    Write-Host $message
+    Write-Log $DownloadLog 'INFO' $message
+}
+
+function Write-MarqueeTypeProgress {
+    param(
+        [string]$Type,
+        [string]$Title,
+        [int]$Current,
+        [int]$Total
+    )
+
+    Write-Host ("PROGRESS|Generating {0} marquee|{1}|{2}|{3}" -f $Type, $Current, $Total, $Title)
+    $message = "Generating {0} marquee for {1}" -f $Type, $Title
+    Write-Host $message
+    Write-Log $DownloadLog 'INFO' $message
 }
 
 function Invoke-AudioNormalization {
@@ -630,22 +718,53 @@ function Download-Videos {
         )
         $downloadExitCode = Invoke-YtDlpDownload -Arguments $args
         if ($downloadExitCode -eq 0) {
-            & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $LibDir 'cleanup_filenames.ps1') -DownloadDir $DownloadDir -TotalLimit $FileNameTotalLimit 2>&1 | Tee-Object -FilePath $DownloadLog -Append
-            $cleanupExitCode = $LASTEXITCODE
+            $cleanupListFile = Join-Path $ResourceTempDir ('cleanup_files_' + [Guid]::NewGuid().ToString('N') + '.txt')
+            try {
+                $currentDownloadFiles = @(Get-NewDownloadFiles -Before $beforeThisDownload | ForEach-Object { $_.FullName })
+                Set-Content -LiteralPath $cleanupListFile -Value $currentDownloadFiles -Encoding UTF8
+                & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $LibDir 'cleanup_filenames.ps1') -DownloadDir $DownloadDir -TotalLimit $FileNameTotalLimit -PathList $cleanupListFile 2>&1 | Tee-Object -FilePath $DownloadLog -Append
+                $cleanupExitCode = $LASTEXITCODE
+            }
+            finally {
+                if (Test-Path -LiteralPath $cleanupListFile) { Remove-Item -LiteralPath $cleanupListFile -Force -ErrorAction SilentlyContinue }
+            }
             if ($cleanupExitCode -eq 0) {
                 $newFiles = @(Get-NewDownloadFiles -Before $beforeThisDownload | Where-Object { $_.Extension -ieq $newFileExtension })
+                if (-not $DownloadAudioOnly) { $newFiles = @(Get-UniqueMarqueeVideoFiles -Files $newFiles) }
                 if ($NormalizeAudioEnabled -and -not $DownloadAudioOnly) {
                     foreach ($file in $newFiles) {
                         Invoke-AudioNormalization -Path $file.FullName | Out-Null
                     }
                 }
-                if ($GenerateStandardMarqueeEnabled -or $GenerateFullColorMarqueeEnabled) {
+                if ($GenerateStandardMarqueeEnabled -or $GenerateFullColorMarqueeEnabled -or $GenerateVideoMarqueeEnabled) {
                     $marqueeIndex = 0
+                    $selectedTypes = @(Get-SelectedMarqueeTypeNames)
+                    $typeTotal = [Math]::Max(1, $selectedTypes.Count)
+                    $overallMarqueeSteps = [Math]::Max(1, $newFiles.Count * $typeTotal)
                     foreach ($file in $newFiles) {
                         $marqueeIndex++
                         Write-Host ("PROGRESS|Generating marquees|{0}|{1}|{2}" -f $marqueeIndex, $newFiles.Count, $file.BaseName)
-                        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $LibDir 'generate_marquees.ps1') -VideoPath $file.FullName -DownloadDir $DownloadDir -Standard $GenerateStandardMarqueeEnabled.ToString() -FullColor $GenerateFullColorMarqueeEnabled.ToString() 2>&1 | Tee-Object -FilePath $DownloadLog -Append
-                        if ($LASTEXITCODE -ne 0) { throw "Marquee generation failed for $($file.Name)." }
+                        Write-MarqueeTypesStart -Title $file.BaseName -Types $selectedTypes
+                        $typeStep = 0
+                        if ($GenerateStandardMarqueeEnabled) {
+                            $typeStep++
+                            Write-MarqueeTypeProgress -Type 'Standard' -Title $file.BaseName -Current ((($marqueeIndex - 1) * $typeTotal) + $typeStep) -Total $overallMarqueeSteps
+                            & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $LibDir 'generate_marquees.ps1') -VideoPath $file.FullName -DownloadDir $DownloadDir -Standard $GenerateStandardMarqueeEnabled.ToString() -FullColor 'False' 2>&1 | Tee-Object -FilePath $DownloadLog -Append
+                            if ($LASTEXITCODE -ne 0) { throw "Marquee generation failed for $($file.Name)." }
+                        }
+                        if ($GenerateVideoMarqueeEnabled -or $GenerateFullColorMarqueeEnabled) {
+                            $recipeSeed = [Guid]::NewGuid().ToString('N')
+                            if ($GenerateVideoMarqueeEnabled) {
+                                $typeStep++
+                                Write-MarqueeTypeProgress -Type 'Animated' -Title $file.BaseName -Current ((($marqueeIndex - 1) * $typeTotal) + $typeStep) -Total $overallMarqueeSteps
+                            }
+                            if ($GenerateFullColorMarqueeEnabled) {
+                                $typeStep++
+                                Write-MarqueeTypeProgress -Type 'Full Color' -Title $file.BaseName -Current ((($marqueeIndex - 1) * $typeTotal) + $typeStep) -Total $overallMarqueeSteps
+                            }
+                            & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $LibDir 'generate_video_marquees.ps1') -VideoPath $file.FullName -DownloadDir $DownloadDir -Animated $GenerateVideoMarqueeEnabled.ToString() -FullColorStill $GenerateFullColorMarqueeEnabled.ToString() -RandomSeed $recipeSeed 2>&1 | Tee-Object -FilePath $DownloadLog -Append
+                            if ($LASTEXITCODE -ne 0) { throw "Video marquee generation failed for $($file.Name)." }
+                        }
                     }
                 }
                 $success++
@@ -664,7 +783,6 @@ function Download-Videos {
     if (Test-Path -LiteralPath $DownloadSnapshotFile) { Remove-Item -LiteralPath $DownloadSnapshotFile -Force }
     if ($failed -gt 0) { exit 1 }
 }
-
 function Get-FileReviewKey {
     param([string]$FileName)
 
@@ -758,22 +876,45 @@ function Generate-MarqueesForList {
     param([string]$ListFile)
 
     Ensure-Tool 'ffmpeg'
-    if (-not ($GenerateStandardMarqueeEnabled -or $GenerateFullColorMarqueeEnabled)) {
+    if (-not ($GenerateStandardMarqueeEnabled -or $GenerateFullColorMarqueeEnabled -or $GenerateVideoMarqueeEnabled)) {
         $script:GenerateStandardMarqueeEnabled = $true
     }
     if (-not (Test-Path -LiteralPath $ListFile)) { throw "Selected video list was not found: $ListFile" }
     $files = @(Get-Content -LiteralPath $ListFile | ForEach-Object { $_.Trim() } | Where-Object { $_ -and (Test-Path -LiteralPath $_) -and ([IO.Path]::GetExtension($_) -ieq '.mp4') })
+    $files = @(Get-UniqueMarqueeVideoPaths -Files $files)
     if ($files.Count -eq 0) { throw 'No MP4 files were selected for marquee generation.' }
 
     $index = 0
+    $selectedTypes = @(Get-SelectedMarqueeTypeNames)
+    $typeTotal = [Math]::Max(1, $selectedTypes.Count)
+    $overallMarqueeSteps = [Math]::Max(1, $files.Count * $typeTotal)
     foreach ($file in $files) {
         $index++
         $name = [IO.Path]::GetFileNameWithoutExtension($file)
         Write-Host ("PROGRESS|Generating marquees|{0}|{1}|{2}" -f $index, $files.Count, $name)
-        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $LibDir 'generate_marquees.ps1') -VideoPath $file -DownloadDir $DownloadDir -Standard $GenerateStandardMarqueeEnabled.ToString() -FullColor $GenerateFullColorMarqueeEnabled.ToString() 2>&1 | Tee-Object -FilePath $DownloadLog -Append
-        if ($LASTEXITCODE -ne 0) { throw "Marquee generation failed for $([IO.Path]::GetFileName($file))." }
+        Write-MarqueeTypesStart -Title $name -Types $selectedTypes
+        $typeStep = 0
+        if ($GenerateStandardMarqueeEnabled) {
+            $typeStep++
+            Write-MarqueeTypeProgress -Type 'Standard' -Title $name -Current ((($index - 1) * $typeTotal) + $typeStep) -Total $overallMarqueeSteps
+            & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $LibDir 'generate_marquees.ps1') -VideoPath $file -DownloadDir $DownloadDir -Standard $GenerateStandardMarqueeEnabled.ToString() -FullColor 'False' 2>&1 | Tee-Object -FilePath $DownloadLog -Append
+            if ($LASTEXITCODE -ne 0) { throw "Marquee generation failed for $([IO.Path]::GetFileName($file))." }
+        }
+        if ($GenerateVideoMarqueeEnabled -or $GenerateFullColorMarqueeEnabled) {
+            $recipeSeed = [Guid]::NewGuid().ToString('N')
+            if ($GenerateVideoMarqueeEnabled) {
+                $typeStep++
+                Write-MarqueeTypeProgress -Type 'Animated' -Title $name -Current ((($index - 1) * $typeTotal) + $typeStep) -Total $overallMarqueeSteps
+            }
+            if ($GenerateFullColorMarqueeEnabled) {
+                $typeStep++
+                Write-MarqueeTypeProgress -Type 'Full Color' -Title $name -Current ((($index - 1) * $typeTotal) + $typeStep) -Total $overallMarqueeSteps
+            }
+            & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $LibDir 'generate_video_marquees.ps1') -VideoPath $file -DownloadDir $DownloadDir -Animated $GenerateVideoMarqueeEnabled.ToString() -FullColorStill $GenerateFullColorMarqueeEnabled.ToString() -RandomSeed $recipeSeed 2>&1 | Tee-Object -FilePath $DownloadLog -Append
+            if ($LASTEXITCODE -ne 0) { throw "Video marquee generation failed for $([IO.Path]::GetFileName($file))." }
+        }
     }
-    Write-Host "Finished generating marquee artwork for $($files.Count) file(s). Output: $(Join-Path $DownloadDir 'marquee')"
+    Write-Host "Finished generating marquee artwork for $($files.Count) file(s). Output: $(Join-Path $DownloadDir 'marquees')"
 }
 function Get-UniqueSiblingPath {
     param([string]$Path)
@@ -896,4 +1037,3 @@ try {
         Remove-Item -LiteralPath $DownloadSnapshotFile -Force
     }
 }
-

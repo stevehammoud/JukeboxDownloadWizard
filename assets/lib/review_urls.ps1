@@ -23,8 +23,7 @@ if ([string]::IsNullOrWhiteSpace($CacheFile)) {
 $CacheVersion = 2
 $MaxCacheRecords = 5000
 if ($MaxDurationSeconds -lt 1) { $MaxDurationSeconds = 3600 }
-if ($MinDurationSeconds -lt 0) { $MinDurationSeconds = 0 }
-if ($MinDurationSeconds -gt $MaxDurationSeconds) { $MinDurationSeconds = $MaxDurationSeconds }
+$MinDurationSeconds = 0
 $seen = [ordered]@{}
 $seenTitles = @{}
 $trustedExistingIds = @{}
@@ -123,6 +122,14 @@ function Format-Duration {
         return '{0}:{1:00}:{2:00}' -f [int][Math]::Floor($span.TotalHours), $span.Minutes, $span.Seconds
     }
     return '{0}:{1:00}' -f [int]$span.TotalMinutes, $span.Seconds
+}
+
+function Test-SupportedVideoShape {
+    param([double]$Width, [double]$Height)
+    if (-not $Width -or -not $Height) { return $false }
+
+    $ratio = $Width / $Height
+    return ($ratio -ge 1.25 -and $ratio -le 2.60)
 }
 
 function Encode-PreviewField {
@@ -227,6 +234,9 @@ function Get-MetadataRecord {
         $cachedMbTitle = Get-CacheField $Cache[$Id] 'mbTitle' ''
         if ($cachedDuration -ne $null -and $cachedDuration -ne '' -and $cachedLiveStatus -ne $null) {
             if ((-not $RequireMusicBrainzMetadata) -or ((-not [string]::IsNullOrWhiteSpace([string]$cachedMbArtist)) -and (-not [string]::IsNullOrWhiteSpace([string]$cachedMbTitle)))) {
+                $currentlyApproved = Test-MetadataRecordApproved $Cache[$Id]
+                Set-CacheField $Cache[$Id] 'approved' ([bool]$currentlyApproved)
+                if ($currentlyApproved) { Set-CacheField $Cache[$Id] 'reason' '' }
                 $script:cacheHits++
                 Touch-CacheRecord $Cache[$Id]
                 return $Cache[$Id]
@@ -269,20 +279,15 @@ function Get-MetadataRecord {
         $reason = 'live or DVR stream'
     } elseif (-not $duration -or $duration -le 0) {
         $reason = 'missing duration'
-    } elseif ($duration -lt $MinDurationSeconds) {
-        $reason = "shorter than $MinDurationSeconds seconds"
     } elseif ($duration -gt $MaxDurationSeconds) {
         $reason = "longer than $MaxDurationSeconds seconds"
     } elseif (-not $w -or -not $h) {
         $reason = 'missing dimensions'
     } else {
-        $ratio = $w / $h
-        $is43 = [Math]::Abs($ratio - (4/3)) -le 0.04
-        $is169 = [Math]::Abs($ratio - (16/9)) -le 0.04
-        if ($is43 -or $is169) {
+        if (Test-SupportedVideoShape -Width $w -Height $h) {
             $approved = $true
         } else {
-            $reason = 'not 4:3 or 16:9'
+            $reason = 'not landscape or cinematic'
         }
     }
 
@@ -336,7 +341,6 @@ function Test-MetadataRecordApproved {
 
     if ($isLive -or $wasLive -or ($liveStatus -and $liveStatus -ne 'not_live')) { return $false }
     if (-not $duration -or $duration -le 0) { return $false }
-    if ($duration -lt $MinDurationSeconds) { return $false }
     if ($duration -gt $MaxDurationSeconds) { return $false }
     if (-not $w -or -not $h) { return $false }
     if ($RequireMusicBrainzMetadata) {
@@ -344,10 +348,7 @@ function Test-MetadataRecordApproved {
         if ([string]::IsNullOrWhiteSpace([string](Get-CacheField $Record 'mbTitle' ''))) { return $false }
     }
 
-    $ratio = $w / $h
-    $is43 = [Math]::Abs($ratio - (4/3)) -le 0.04
-    $is169 = [Math]::Abs($ratio - (16/9)) -le 0.04
-    return ($is43 -or $is169)
+    return (Test-SupportedVideoShape -Width $w -Height $h)
 }
 
 if ($ExistingUrlFile -and (Test-Path -LiteralPath $ExistingUrlFile)) {

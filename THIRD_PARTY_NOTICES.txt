@@ -45,6 +45,16 @@ Bebas Neue
 Source/license: Bundled with its SIL Open Font License file.
 Purpose: Legacy/alternate marquee text styling.
 
+Bundled Google Fonts for animated marquees
+Fonts: Bangers, Bungee, Fugaz One, Righteous, Monoton, Shrikhand,
+Lilita One, Black Ops One, Luckiest Guy, Titan One, Rowdies, Carter One,
+Ultra, and Bevan.
+Source: https://github.com/google/fonts
+License: SIL Open Font License 1.1 or Apache License 2.0, depending on the
+font family. License files are bundled with each font under
+assets/fonts/<FontName>/OFL.txt or assets/fonts/<FontName>/LICENSE.txt.
+Purpose: Animated marquee word-art text styling.
+
 Online metadata and artwork services
 ------------------------------------
 

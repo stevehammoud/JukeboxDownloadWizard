@@ -1,3 +1,13 @@
+Version 0.3.0.0
+- Added animated MP4 marquee generation with randomized loop-ready backgrounds, word-art styles, motion recipes, and equalizer visualizers.
+- Added marquee type selection for Standard, Full Color, and Animated outputs.
+- Added Full Color still marquees generated from the animated marquee recipe with static full-size word art and mirrored side artwork.
+- Improved MusicBrainz, Cover Art Archive, fanart.tv, Wikimedia, and fallback artwork handling across marquee types.
+- Added filename safety checks and duplicate-source handling so generated BitLCD marquee names remain reliable.
+- Improved generated artwork organization under downloads\marquees\standard, downloads\marquees\full_color, and downloads\marquees\animated.
+- Added bundled display fonts and updated third-party notices for the new marquee assets and services.
+
+--------------------------------------------------
 Version 0.2.3.2
 - Fixed Create MP3s from MP4s so converted MP3 files save to the app downloads folder instead of the source MP4 folder.
 
@@ -152,4 +162,3 @@ Version 0.0.1.0
 - Improved yt-dlp download console output to hide download progress noise written to log.
 - Limited log retention to five files per log folder.
 - Added Move Downloads to SSD action + file validation to avoid duplicate files.
-

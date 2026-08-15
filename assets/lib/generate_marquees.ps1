@@ -26,6 +26,7 @@ $FallbackLogoPath = Join-Path $AssetsDir 'images\one_sauce_merged.png'
 $CacheDir = Join-Path $AssetsDir 'resources\cache\album_art'
 $MetadataCacheDir = Join-Path $AssetsDir 'resources\cache\musicbrainz_metadata'
 $ArtistArtCacheDir = Join-Path $AssetsDir 'resources\cache\artist_art'
+$UrlMetadataCacheFile = Join-Path $AssetsDir 'resources\cache\jukebox_url_metadata_cache.json'
 $AlbumArtLookupScript = Join-Path $AssetsDir 'lib\album_art_lookup.ps1'
 $MusicBrainzMetadataScript = Join-Path $AssetsDir 'lib\musicbrainz_metadata_lookup.ps1'
 $ArtistArtLookupScript = Join-Path $AssetsDir 'lib\artist_art_lookup.ps1'
@@ -41,8 +42,24 @@ foreach ($fontPath in $FontFiles) {
     if (Test-Path -LiteralPath $fontPath) { $PrivateFonts.AddFontFile($fontPath) }
 }
 $baseName = [IO.Path]::GetFileNameWithoutExtension($VideoPath)
-$marqueeRoot = Join-Path $DownloadDir 'marquee'
-if ($GenerateStandard) { New-Item -ItemType Directory -Path $marqueeRoot -Force | Out-Null }
+$outputBaseName = $baseName -replace '\s+\(JUKE\)$', ''
+if ([string]::IsNullOrWhiteSpace($outputBaseName)) { $outputBaseName = $baseName }
+$MarqueeFileNameTotalLimit = 104
+function Get-MarqueeOutputFileName {
+    param([string]$BaseName, [string]$Extension)
+    $suffix = ' (JUKE)'
+    $cleanBase = $BaseName
+    if ([string]::IsNullOrWhiteSpace($cleanBase)) { $cleanBase = 'marquee' }
+    $baseLimit = [Math]::Max(1, $MarqueeFileNameTotalLimit - $suffix.Length - $Extension.Length)
+    if ($cleanBase.Length -gt $baseLimit) { $cleanBase = $cleanBase.Substring(0, $baseLimit) }
+    if ([string]::IsNullOrWhiteSpace($cleanBase)) { $cleanBase = 'marquee' }
+    return ($cleanBase + $suffix + $Extension)
+}
+$marqueesRoot = Join-Path $DownloadDir 'marquees'
+$standardRoot = Join-Path $marqueesRoot 'standard'
+$legacyFullColorRoot = Join-Path $marqueesRoot 'full_color'
+if ($GenerateStandard) { New-Item -ItemType Directory -Path $standardRoot -Force | Out-Null }
+if ($GenerateFullColor) { New-Item -ItemType Directory -Path $legacyFullColorRoot -Force | Out-Null }
 
 $tempDir = Join-Path ([IO.Path]::GetTempPath()) ('jdw_marquee_' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
@@ -53,6 +70,10 @@ function Repair-TextEncoding {
     if ([string]::IsNullOrWhiteSpace($Value)) { return '' }
     $Value = $Value -replace ([string][char]0xfffd + '\??'), ''
     $Value = $Value -replace [string][char]0xfffd, ''
+    $Value = $Value -replace ([string][char]0x00c2 + [char]0x00a0), ' '
+    $Value = $Value -replace [string][char]0x00a0, ' '
+    $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x00a6), '...'
+    $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x00a2), '-'
     $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0099), "'"
     $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0098), "'"
     $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x009c), '"'
@@ -62,6 +83,8 @@ function Repair-TextEncoding {
     $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0092), '-'
     $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0093), '-'
     $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0094), '-'
+    $Value = $Value -replace '[\p{Cc}\p{Cf}]', ' '
+    $Value = $Value -replace '\s+', ' '
     if ($Value.IndexOf([char]0x00c3) -lt 0 -and $Value.IndexOf([char]0x00c2) -lt 0) { return $Value }
     try {
         $bytes = [Text.Encoding]::GetEncoding(1252).GetBytes($Value)
@@ -72,6 +95,33 @@ function Repair-TextEncoding {
     }
     return $Value
 }
+
+function Get-NormalizedOutputBaseName {
+    param([string]$Name)
+
+    $clean = $Name -replace '\s+\(JUKE\)$', ''
+    if ([string]::IsNullOrWhiteSpace($clean)) { return $Name }
+    return $clean
+}
+
+function Remove-DuplicateStandardMarqueeOutputs {
+    param(
+        [string]$Folder,
+        [string]$OutputBaseName,
+        [string]$KeepPath
+    )
+
+    if (-not (Test-Path -LiteralPath $Folder)) { return }
+    $targetKey = (Get-NormalizedOutputBaseName -Name $OutputBaseName).ToUpperInvariant()
+    Get-ChildItem -LiteralPath $Folder -File -Filter '*.jpg' -ErrorAction SilentlyContinue | ForEach-Object {
+        $existingBase = [IO.Path]::GetFileNameWithoutExtension($_.Name)
+        $existingKey = (Get-NormalizedOutputBaseName -Name $existingBase).ToUpperInvariant()
+        if ($existingKey -eq $targetKey -and $_.FullName -ine $KeepPath) {
+            Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 function Draw-ImageAtFullHeight {
     param(
         [Drawing.Graphics]$Graphics,
@@ -140,12 +190,39 @@ function Get-VideoStats {
     return $result
 }
 
+function Get-VideoReleaseTitle {
+    param([string]$Path)
+
+    try {
+        $json = (& ffprobe -v error -show_entries format_tags -of json $Path 2>$null | Out-String)
+        if ([string]::IsNullOrWhiteSpace($json)) { return '' }
+        $metadata = $json | ConvertFrom-Json
+        if (-not $metadata.format -or -not $metadata.format.tags) { return '' }
+        $tags = $metadata.format.tags
+        foreach ($tagName in @('album', 'release', 'album_title')) {
+            foreach ($property in @($tags.PSObject.Properties)) {
+                if ($property.Name -ieq $tagName) {
+                    $candidate = Clean-MarqueeText ([string]$property.Value)
+                    if (-not [string]::IsNullOrWhiteSpace($candidate)) { return $candidate }
+                }
+            }
+        }
+    }
+    catch {
+    }
+    return ''
+}
+
 function Get-AlbumCoverPath {
     param([hashtable]$Parts)
     if (-not (Test-Path -LiteralPath $AlbumArtLookupScript)) { return '' }
     try {
-        if ([string]::IsNullOrWhiteSpace($Parts['Title']) -and [string]::IsNullOrWhiteSpace($Parts['ReleaseMbid'])) { return '' }
-        $cover = & powershell -NoProfile -ExecutionPolicy Bypass -File $AlbumArtLookupScript -Artist $Parts['Artist'] -Title $Parts['Title'] -CacheDir $CacheDir -ReleaseMbid $Parts['ReleaseMbid'] 2>$null | Select-Object -First 1
+        $artist = [string]$Parts['Artist']
+        $title = [string]$Parts['Title']
+        $releaseMbid = [string]$Parts['ReleaseMbid']
+        $releaseTitle = [string]$Parts['ReleaseTitle']
+        if ([string]::IsNullOrWhiteSpace($title) -and [string]::IsNullOrWhiteSpace($releaseMbid)) { return '' }
+        $cover = & powershell -NoProfile -ExecutionPolicy Bypass -File $AlbumArtLookupScript -Artist $artist -Title $title -CacheDir $CacheDir -ReleaseMbid $releaseMbid -ReleaseTitle $releaseTitle 2>$null | Select-Object -First 1
         if ($cover -and (Test-Path -LiteralPath $cover)) { return [string]$cover }
     }
     catch {
@@ -155,39 +232,118 @@ function Get-AlbumCoverPath {
 function Get-MusicBrainzTextParts {
     param([hashtable]$Parts)
     if (-not (Test-Path -LiteralPath $MusicBrainzMetadataScript)) { return $Parts }
+    $candidates = @(Get-MusicBrainzCandidateParts -Parts $Parts)
     try {
-        if ([string]::IsNullOrWhiteSpace($Parts['Title'])) { return $Parts }
-        $json = & powershell -NoProfile -ExecutionPolicy Bypass -File $MusicBrainzMetadataScript -Artist $Parts['Artist'] -Title $Parts['Title'] -CacheDir $MetadataCacheDir 2>$null | Select-Object -First 1
-        if ([string]::IsNullOrWhiteSpace($json)) { return $Parts }
-        $metadata = $json | ConvertFrom-Json
-        $artist = Clean-MarqueeText ([string]$Parts['Artist'])
-        $title = Clean-MarqueeTitle ([string]$Parts['Title'])
-        $metadataArtist = Clean-MarqueeText ([string]$metadata.Artist)
-        $metadataTitle = Clean-MarqueeTitle ([string]$metadata.Title)
-        $releaseTitle = Clean-MarqueeText ([string]$metadata.ReleaseTitle)
-        if (($artist -ieq 'UNKNOWN ARTIST' -or [string]::IsNullOrWhiteSpace($artist)) -and -not [string]::IsNullOrWhiteSpace($metadataArtist)) { $artist = $metadataArtist }
-        if ([string]::IsNullOrWhiteSpace($title) -and -not [string]::IsNullOrWhiteSpace($metadataTitle)) { $title = $metadataTitle }
-        if ($releaseTitle -ieq $title -or $releaseTitle -ieq $artist) { $releaseTitle = '' }
-        return @{
-            Artist = $artist.Trim().ToUpperInvariant()
-            Title = $title.Trim().ToUpperInvariant()
-            ReleaseTitle = $releaseTitle.Trim().ToUpperInvariant()
-            ReleaseYear = (Get-ReleaseYear ([string]$metadata.ReleaseDate))
-            ArtistMbid = ([string]$metadata.ArtistMbid).Trim()
-            ReleaseMbid = ([string]$metadata.ReleaseMbid).Trim()
+        foreach ($candidate in $candidates) {
+            if ([string]::IsNullOrWhiteSpace($candidate['Title'])) { continue }
+            $releaseCandidate = [string]$candidate['ReleaseTitle']
+            $args = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $MusicBrainzMetadataScript, '-Artist', $candidate['Artist'], '-Title', $candidate['Title'], '-CacheDir', $MetadataCacheDir)
+            if (-not [string]::IsNullOrWhiteSpace($releaseCandidate)) {
+                $args += @('-ReleaseTitle', $releaseCandidate)
+            }
+            if (-not [string]::IsNullOrWhiteSpace([string]$candidate['ReleaseYear']) -and [string]$candidate['ReleaseYear'] -ne 'UNKNOWN') {
+                $args += @('-ReleaseYear', [string]$candidate['ReleaseYear'])
+            }
+            $json = & powershell @args 2>$null | Select-Object -First 1
+            if ([string]::IsNullOrWhiteSpace($json)) { continue }
+            $metadata = $json | ConvertFrom-Json
+            $artist = Normalize-MarqueeArtist ([string]$metadata.Artist)
+            $title = Clean-MarqueeTitle ([string]$metadata.Title)
+            if ([string]::IsNullOrWhiteSpace($artist)) { $artist = [string]$candidate['Artist'] }
+            if ([string]::IsNullOrWhiteSpace($title)) { $title = [string]$candidate['Title'] }
+            return @{
+                Artist = $artist.Trim().ToUpperInvariant()
+                Title = $title.Trim().ToUpperInvariant()
+                ReleaseTitle = ([string]$metadata.ReleaseTitle).Trim().ToUpperInvariant()
+                ReleaseYear = if (-not [string]::IsNullOrWhiteSpace([string]$metadata.ReleaseDate)) { (Get-ReleaseYear ([string]$metadata.ReleaseDate)) } else { [string]$candidate['ReleaseYear'] }
+                ArtistMbid = ([string]$metadata.ArtistMbid).Trim()
+                ReleaseMbid = ([string]$metadata.ReleaseMbid).Trim()
+                ReleaseMatchSource = ([string]$metadata.ReleaseMatchSource).Trim()
+            }
         }
     }
     catch {
     }
     return $Parts
 }
+
+function Get-MusicBrainzCandidateParts {
+    param([hashtable]$Parts)
+
+    $seen = @{}
+    $candidates = @()
+    foreach ($titleCandidate in (Get-TitleLookupCandidates -Title ([string]$Parts['Title']))) {
+        $candidate = @{}
+        foreach ($key in $Parts.Keys) { $candidate[$key] = $Parts[$key] }
+        $candidate['Title'] = $titleCandidate.Trim().ToUpperInvariant()
+        $key = (([string]$candidate['Artist']) + '|' + ([string]$candidate['Title']) + '|' + ([string]$candidate['ReleaseTitle']) + '|' + ([string]$candidate['ReleaseYear'])).ToUpperInvariant()
+        if ($seen.ContainsKey($key)) { continue }
+        $seen[$key] = $true
+        $candidates += $candidate
+    }
+    return @($candidates)
+}
+
+function Get-TitleLookupCandidates {
+    param([string]$Title)
+
+    $clean = Clean-MarqueeTitle $Title
+    if ([string]::IsNullOrWhiteSpace($clean)) { return @() }
+    $results = New-Object System.Collections.Generic.List[string]
+    $results.Add($clean)
+    $dashSeparators = '-' + [string][char]0x2013 + [string][char]0x2014
+    $dashParts = @($clean -split ('\s*[' + [regex]::Escape($dashSeparators) + ']+\s*') | ForEach-Object { Clean-MarqueeTitle $_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and $_.Length -ge 2 })
+    if ($dashParts.Count -gt 1) {
+        foreach ($part in $dashParts) { $results.Add($part) }
+    }
+    $deduped = @()
+    $seen = @{}
+    foreach ($item in $results) {
+        $key = $item.ToUpperInvariant()
+        if ($seen.ContainsKey($key)) { continue }
+        $seen[$key] = $true
+        $deduped += $item
+    }
+    return @($deduped)
+}
+
+function Test-ConfidentAlbumCover {
+    param([hashtable]$Parts)
+    if (-not [string]::IsNullOrWhiteSpace([string]$Parts['ReleaseMbid'])) { return $true }
+    if ([string]$Parts['ReleaseMatchSource'] -ieq 'release_tag') { return $true }
+    $releaseTitle = Clean-MarqueeText ([string]$Parts['ReleaseTitle'])
+    $title = Clean-MarqueeText ([string]$Parts['Title'])
+    if ([string]::IsNullOrWhiteSpace($releaseTitle) -or [string]::IsNullOrWhiteSpace($title)) { return $false }
+    if ($releaseTitle -ieq $title) { return $true }
+    if ($releaseTitle -match ('(?i)^' + [regex]::Escape($title) + '\s*[\(\[]')) { return $true }
+    return $false
+}
+
+function Test-AlbumCoverLookupAllowed {
+    param([hashtable]$Parts)
+    if (Test-ConfidentAlbumCover -Parts $Parts) { return $true }
+
+    $artist = [string]$Parts['Artist']
+    $title = [string]$Parts['Title']
+    $releaseYear = [string]$Parts['ReleaseYear']
+    return (
+        -not [string]::IsNullOrWhiteSpace($artist) -and
+        $artist -ine 'UNKNOWN ARTIST' -and
+        -not [string]::IsNullOrWhiteSpace($title) -and
+        $releaseYear -match '^(19|20)\d{2}$'
+    )
+}
 function Clean-MarqueeText {
     param([string]$Text)
     if ([string]::IsNullOrWhiteSpace($Text)) { return '' }
     $clean = Repair-TextEncoding $Text
-    $noiseWords = 'official\s+music\s+video|official\s+video|official\s+audio|official\s+lyric\s+video|lyric\s+video|lyrics?|visuali[sz]er|music\s+video|audio|hd|4k|remaster(?:ed)?|karaoke|unreleased\s+video|new\s+unreleased\s+video|new\s+video|video'
-    $clean = $clean -replace ('(?i)\s*[\[\(\{][^\]\)\}]*\b(' + $noiseWords + ')\b[^\]\)\}]*[\]\)\}]'), ''
-    $clean = $clean -replace ('(?i)\s+[-|:]\s*(' + $noiseWords + ')\b.*$'), ''
+    $clean = $clean -replace '[\p{Cc}\p{Cf}]', ' '
+    $noiseWords = 'official\s+music\s+video|official\s+video|official\s+audio|official\s+lyric\s+video|official|lyric\s+video|lyrics?|visuali[sz]er|performance\s+video|music\s+video|audio|hd|hq|sd|4k|[0-9]{3,4}p|mv|tv|remaster(?:ed)?|karaoke|unreleased\s+video|new\s+unreleased\s+video|new\s+video|video'
+    $contextNoiseWords = $noiseWords + '|live(?:\s+(?:at|from|in|on)\b.*)?|sub(?:titula[dd][ao]?|itula[dd][ao]?|titulos?)|espanol|ingles|legendado|traducao|translated|translation'
+    $clean = $clean -replace ('(?i)\s*[\[\(\{][^\]\)\}]*\b(' + $contextNoiseWords + ')\b[^\]\)\}]*[\]\)\}]'), ''
+    $clean = $clean -replace ('(?i)\s+[-|:]\s*(' + $contextNoiseWords + ')\b.*$'), ''
+    $clean = $clean -replace ('(?i)\s+\b(live\s+(?:at|from|in|on)\b.*)$'), ''
+    $clean = $clean -replace ('(?i)\s+\b(' + $contextNoiseWords + ')\b.*$'), ''
     $clean = $clean -replace ('(?i)\b(' + $noiseWords + ')\b'), ''
     $clean = $clean -replace '\s+', ' '
     $clean = $clean.Trim(' ', '-', '|', ':', '.', '_')
@@ -197,9 +353,116 @@ function Clean-MarqueeText {
 function Clean-MarqueeTitle {
     param([string]$Text)
     $clean = Clean-MarqueeText $Text
+    $clean = $clean -replace '\s*[\(\[]\s*(19|20)\d{2}\s*[\)\]]\s*', ' '
     $clean = $clean -replace '(?i)\s+\b(ft\.?|feat\.?|featuring)\b\.?\s+.*$', ''
     $clean = $clean -replace '\s+', ' '
     return $clean.Trim(' ', '-', '|', ':', '.', '_')
+}
+
+function Normalize-MarqueeArtist {
+    param([string]$Artist)
+    $clean = Clean-MarqueeText $Artist
+    if ($clean -match '^\s*(?<name>.+?)\s*,\s*(?<article>The|A|An)\s*$') {
+        $clean = ('{0} {1}' -f $Matches['article'], $Matches['name'])
+    }
+    if ($clean -match '(?i)^\s*AC\s*/?\s*DC\s*$') { return 'AC/DC' }
+    if ($clean -match '(?i)^\s*DESTINYS\s+CHILD\s*$') { return "Destiny's Child" }
+    if ($clean -match '^\s*(?<thousands>\d{1,2})\s+(?<hundreds>\d{3})(?<rest>\s+\S.*)$') {
+        $clean = ('{0},{1}{2}' -f $Matches['thousands'], $Matches['hundreds'], $Matches['rest'])
+    }
+    return $clean
+}
+
+function Get-ParentheticalReleaseYear {
+    param([string]$Text)
+    if ([string]::IsNullOrWhiteSpace($Text)) { return '' }
+    $nowYear = [int](Get-Date).Year + 1
+    foreach ($match in [regex]::Matches($Text, '\((?<year>(19|20)\d{2})\)')) {
+        $year = [int]$match.Groups['year'].Value
+        if ($year -ge 1900 -and $year -le $nowYear) { return $year.ToString() }
+    }
+    return ''
+}
+
+function Convert-TitleToDownloadBaseName {
+    param([string]$Title)
+    if ([string]::IsNullOrWhiteSpace($Title)) { return '' }
+    $name = $Title
+    $name = $name -replace ([string][char]0xfffd + '\??'), ''
+    $name = $name -replace [string][char]0xfffd, ''
+    $name = $name.Normalize('FormD') -replace '\p{Mn}', ''
+    $name = $name -replace '\[', '(' -replace '\]', ')'
+    $name = $name -replace '_+', ' '
+    $name = $name -replace "[^A-Za-z0-9 '`$!&,@\-\._\(\)]", ' '
+    $name = $name -replace '\s+', ' '
+    return $name.Trim(' ', '.', '_', '-')
+}
+
+function Get-CachedSourceTitle {
+    param([string]$BaseName)
+    if ([string]::IsNullOrWhiteSpace($BaseName) -or -not (Test-Path -LiteralPath $UrlMetadataCacheFile)) { return '' }
+    try {
+        $cache = Get-Content -LiteralPath $UrlMetadataCacheFile -Raw | ConvertFrom-Json
+        if (-not $cache -or -not $cache.videos) { return '' }
+        foreach ($property in @($cache.videos.PSObject.Properties)) {
+            $title = [string]$property.Value.title
+            if ([string]::IsNullOrWhiteSpace($title)) { continue }
+            $candidate = Convert-TitleToDownloadBaseName -Title $title
+            if ($candidate -ieq $BaseName) { return $title }
+            if ($candidate.Length -gt $BaseName.Length -and $candidate.Substring(0, $BaseName.Length) -ieq $BaseName) { return $title }
+        }
+    }
+    catch {
+    }
+    return ''
+}
+
+function Test-SourceOrChannelText {
+    param([string]$Value)
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $false }
+    return ($Value -match '(?i)\b(sony\s+animation|sony\s+pictures\s+animation|disney|netflix|warner|vevo|records?|recordings|entertainment|pictures|studios?|animation|official|youtube)\b')
+}
+
+function Remove-KnownSourceTail {
+    param([string]$Value)
+    if ([string]::IsNullOrWhiteSpace($Value)) { return '' }
+    $clean = $Value
+    $sourceTails = @(
+        'Sony Pictures Animation',
+        'Sony Animation',
+        'SonyPicturesAnimation',
+        'DisneyMusicVEVO',
+        'Atlantic Records',
+        'Republic Records',
+        'Interscope Records',
+        'Warner Records',
+        'Universal Music',
+        'Netflix',
+        'Disney'
+    )
+    foreach ($tail in $sourceTails) {
+        $clean = $clean -replace ('(?i)\s+' + [regex]::Escape($tail) + '\s*$'), ''
+    }
+    return ($clean -replace '\s+', ' ').Trim()
+}
+
+function Split-AmbiguousTitleContext {
+    param([string]$Value)
+    $titleValue = Clean-MarqueeTitle (Remove-KnownSourceTail $Value)
+    $releaseValue = ''
+
+    $releaseContexts = @(
+        'KPop Demon Hunters'
+    )
+    foreach ($context in $releaseContexts) {
+        if ($titleValue -match ('(?i)^(?<title>.+?)\s+' + [regex]::Escape($context) + '\s*$')) {
+            $titleValue = $Matches['title'].Trim()
+            $releaseValue = $context
+            break
+        }
+    }
+
+    return @{ Title = $titleValue; ReleaseTitle = $releaseValue }
 }
 
 function Get-ReleaseYear {
@@ -212,14 +475,46 @@ function Get-TextParts {
     param([string]$Name)
     $artist = 'UNKNOWN ARTIST'
     $title = $Name
-    $parts = $Name -split '\s+-\s+', 2
-    if ($parts.Count -eq 2) {
-        $artist = $parts[0]
-        $title = $parts[1]
+    $releaseTitle = ''
+    $releaseYear = Get-ParentheticalReleaseYear -Text $Name
+    $cacheBaseName = ($Name -replace '\s+\(JUKE\)$', '').Trim()
+    $sourceName = Get-CachedSourceTitle -BaseName $cacheBaseName
+    if (-not [string]::IsNullOrWhiteSpace($sourceName)) {
+        if ([string]::IsNullOrWhiteSpace($releaseYear)) { $releaseYear = Get-ParentheticalReleaseYear -Text $sourceName }
+        $title = $sourceName
     }
-    $artist = Clean-MarqueeText $artist
+
+    $pipeParts = @($title -split '\s+\|\s+' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if ($pipeParts.Count -ge 3) {
+        $title = $pipeParts[0]
+        $releaseTitle = Clean-MarqueeText $pipeParts[1]
+        if (-not (Test-SourceOrChannelText $pipeParts[1])) {
+            $artist = $pipeParts[1]
+            $releaseTitle = ''
+        }
+    } elseif ($pipeParts.Count -eq 2) {
+        $title = $pipeParts[0]
+        if (Test-SourceOrChannelText $pipeParts[1]) {
+            $releaseTitle = Clean-MarqueeText $pipeParts[1]
+        } else {
+            $artist = $pipeParts[1]
+        }
+    } else {
+        $parts = $title -split '\s+-\s+', 2
+        if ($parts.Count -eq 2) {
+            $artist = $parts[0]
+            $title = $parts[1]
+        } else {
+            $ambiguous = Split-AmbiguousTitleContext -Value $title
+            $title = $ambiguous['Title']
+            $releaseTitle = $ambiguous['ReleaseTitle']
+        }
+    }
+    $artist = Normalize-MarqueeArtist $artist
     $title = Clean-MarqueeTitle $title
-    return @{ Artist = $artist.Trim().ToUpperInvariant(); Title = $title.Trim().ToUpperInvariant(); ReleaseTitle = ''; ReleaseYear = 'UNKNOWN'; ArtistMbid = ''; ReleaseMbid = '' }
+    $releaseTitle = Clean-MarqueeText $releaseTitle
+    if ([string]::IsNullOrWhiteSpace($releaseYear)) { $releaseYear = 'UNKNOWN' }
+    return @{ Artist = $artist.Trim().ToUpperInvariant(); Title = $title.Trim().ToUpperInvariant(); ReleaseTitle = $releaseTitle.Trim().ToUpperInvariant(); ReleaseYear = $releaseYear; ArtistMbid = ''; ReleaseMbid = ''; ReleaseMatchSource = '' }
 }
 
 function Split-ArtistCandidates {
@@ -227,7 +522,7 @@ function Split-ArtistCandidates {
     if ([string]::IsNullOrWhiteSpace($Artist)) { return @() }
 
     $clean = $Artist -replace '(?i)\s+\b(ft\.?|feat\.?|featuring)\b\.?\s+', ' & '
-    $clean = $clean -replace '(?i)\s+\b(with|and|x)\b\s+', ' & '
+    $clean = $clean -replace '(?i)\s+\b(with|and|x|y|con)\b\s+', ' & '
     $parts = @($clean -split '\s*&\s+' | ForEach-Object {
         $candidate = Clean-MarqueeText $_
         $candidate.Trim()
@@ -242,11 +537,18 @@ function Find-ArtistMbidByName {
 
     try {
         $encodedArtist = [Uri]::EscapeDataString(('artist:"{0}"' -f $Artist))
-        $uri = 'https://musicbrainz.org/ws/2/artist/?query={0}&fmt=json&limit=1' -f $encodedArtist
-        $headers = @{ 'User-Agent' = 'JukeboxDownloadWizard/0.2.3.2 (marquee metadata lookup)' }
+$uri = 'https://musicbrainz.org/ws/2/artist/?query={0}&fmt=json&limit=8' -f $encodedArtist
+        $headers = @{ 'User-Agent' = 'JukeboxDownloadWizard/0.3.0.0 (marquee metadata lookup)' }
         $response = Invoke-RestMethod -Uri $uri -Headers $headers -TimeoutSec 15
-        if ($response.artists -and $response.artists.Count -gt 0 -and $response.artists[0].id) {
-            return [string]$response.artists[0].id
+        $foldedArtist = (($Artist.Normalize('FormD') -replace '\p{Mn}', '').ToLowerInvariant() -replace '\bac\s*/?\s*dc\b', 'acdc' -replace '\b(ft|feat|featuring|with|and|y|con|x)\b', ' ' -replace '[^\p{L}\p{Nd}]+', ' ' -replace '\s+', ' ').Trim()
+        $match = @($response.artists) | Sort-Object @{ Expression = {
+            $score = [int]($_.score -as [int])
+            $name = ((([string]$_.name).Normalize('FormD') -replace '\p{Mn}', '').ToLowerInvariant() -replace '\bac\s*/?\s*dc\b', 'acdc' -replace '\b(ft|feat|featuring|with|and|y|con|x)\b', ' ' -replace '[^\p{L}\p{Nd}]+', ' ' -replace '\s+', ' ').Trim()
+            if ($name -eq $foldedArtist) { $score += 100 }
+            $score
+        }; Descending = $true } | Select-Object -First 1
+        if ($match -and $match.id) {
+            return [string]$match.id
         }
     }
     catch {
@@ -569,10 +871,14 @@ function Try-ExtractFrame {
 try {
     Try-ExtractFrame -InputPath $VideoPath -OutputPath $framePath | Out-Null
     $parts = Get-TextParts -Name $baseName
+    $embeddedReleaseTitle = Get-VideoReleaseTitle -Path $VideoPath
+    if (-not [string]::IsNullOrWhiteSpace($embeddedReleaseTitle)) {
+        $parts['ReleaseTitle'] = $embeddedReleaseTitle
+    }
     $parts = Get-MusicBrainzTextParts -Parts $parts
     $videoStats = Get-VideoStats -Path $VideoPath
     $palette = Get-FramePalette -ImagePath $framePath
-    $albumCoverPath = Get-AlbumCoverPath -Parts $parts
+    $albumCoverPath = if (Test-AlbumCoverLookupAllowed -Parts $parts) { Get-AlbumCoverPath -Parts $parts } else { '' }
     $artistArtPath = Get-ArtistArtPath -Parts $parts
     if ($albumCoverPath) { $palette = Get-FramePalette -ImagePath $albumCoverPath }
     $palettePrimary = $palette['Primary']
@@ -594,12 +900,16 @@ try {
             if (-not (Draw-StandardTemplateLayers -Graphics $g -Scheme $scheme)) { throw "Standard marquee layer files were not found: $StandardLayerDir" }
             $leftRect = New-Object Drawing.Rectangle 0, 0, 415, 360
             $rightRect = New-Object Drawing.Rectangle 1505, 0, 415, 360
+            $rightPanelArtPath = $artistArtPath
+            if (-not [string]::IsNullOrWhiteSpace($albumCoverPath) -and -not [string]::IsNullOrWhiteSpace($rightPanelArtPath) -and $albumCoverPath -ieq $rightPanelArtPath) {
+                $rightPanelArtPath = ''
+            }
             if (-not (Draw-ImageFileAtFullHeight -Graphics $g -Path $albumCoverPath -TargetRect $leftRect)) {
                 if ($albumCoverPath -and (Test-Path -LiteralPath $albumCoverPath)) { Remove-Item -LiteralPath $albumCoverPath -Force -ErrorAction SilentlyContinue }
                 Draw-FallbackLogo -Graphics $g -TargetRect $leftRect | Out-Null
             }
-            if (-not (Draw-ImageFileAtFullHeight -Graphics $g -Path $artistArtPath -TargetRect $rightRect)) {
-                if ($artistArtPath -and (Test-Path -LiteralPath $artistArtPath)) { Remove-Item -LiteralPath $artistArtPath -Force -ErrorAction SilentlyContinue }
+            if (-not (Draw-ImageFileAtFullHeight -Graphics $g -Path $rightPanelArtPath -TargetRect $rightRect)) {
+                if ($rightPanelArtPath -and (Test-Path -LiteralPath $rightPanelArtPath)) { Remove-Item -LiteralPath $rightPanelArtPath -Force -ErrorAction SilentlyContinue }
                 Draw-FallbackLogo -Graphics $g -TargetRect $rightRect | Out-Null
             }
             $black = [Drawing.Color]::Black
@@ -608,7 +918,10 @@ try {
             Draw-CenteredText $g $parts['Artist'] (New-Object Drawing.RectangleF 540, 145, 840, 68) 'Anton' 58 $black $softShadow $false
             $bottomText = 'LENGTH: {0}  |  RELEASE DATE: {1}  |  RESOLUTION: {2}' -f $videoStats['Length'], $parts['ReleaseYear'], $videoStats['Resolution']
             Draw-CenteredText $g $bottomText (New-Object Drawing.RectangleF 430, 238, 1060, 94) 'Anton' 52 $black $softShadow $false
-            Save-JpegUnderLimit $bmp (Join-Path $marqueeRoot ($baseName + ' (JUKE).jpg')) 200000
+            $standardOutputPath = Join-Path $standardRoot (Get-MarqueeOutputFileName -BaseName $outputBaseName -Extension '.jpg')
+            Remove-DuplicateStandardMarqueeOutputs -Folder $standardRoot -OutputBaseName $outputBaseName -KeepPath $standardOutputPath
+            Save-JpegUnderLimit $bmp $standardOutputPath 200000
+            Write-Host "Generated Standard marquee: $standardOutputPath"
         }
         finally { $g.Dispose(); $bmp.Dispose() }
     }
@@ -641,12 +954,12 @@ try {
             Draw-CenteredText $g $parts['Title'] (New-Object Drawing.RectangleF 360, 145, 1200, 105) 'Arial Narrow' 64 $textColor ([Drawing.Color]::Black) $true
             $year = (Get-Date).Year.ToString()
             Draw-CenteredText $g $year (New-Object Drawing.RectangleF 1325, 242, 220, 46) 'Consolas' 40 (Mix-Color -A $paletteLight -B ([Drawing.Color]::White) -Amount 0.3) ([Drawing.Color]::Black) $false
-            Save-JpegUnderLimit $bmp (Join-Path $marqueeRoot ($baseName + ' (JUKE).jpg')) 200000
+            $legacyFullColorOutputPath = Join-Path $legacyFullColorRoot (Get-MarqueeOutputFileName -BaseName $outputBaseName -Extension '.jpg')
+            Save-JpegUnderLimit $bmp $legacyFullColorOutputPath 200000
+            Write-Host "Generated Full Color marquee: $legacyFullColorOutputPath"
         }
         finally { $g.Dispose(); $bmp.Dispose() }
     }
-
-    Write-Host "Generated marquee artwork: $baseName"
 }
 finally {
     if ($PrivateFonts) { $PrivateFonts.Dispose() }

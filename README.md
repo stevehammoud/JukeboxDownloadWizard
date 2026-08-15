@@ -2,6 +2,14 @@
 
 Windows desktop app for building YouTube video lists, downloading videos, and generating One saUCE jukebox marquee artwork.
 
+## Release 0.3.0.0 highlights
+
+- Added animated MP4 marquees with randomized music-themed backgrounds, word art, album artwork, and equalizer visualizers.
+- Added selectable marquee output types: Standard, Full Color, and Animated.
+- Added Full Color still marquees based on the animated marquee recipe.
+- Improved album, artist, logo, and fallback artwork lookup for generated marquees.
+- Added filename safety checks so MP4 and marquee names stay compatible with BitLCD matching.
+
 ## Download the app
 
 Download the latest release from:
@@ -54,7 +62,7 @@ Do not share `ytcookies.txt`. It can contain private sign-in data for your YouTu
 
 ## fanart.tv API keys
 
-The app can use fanart.tv for optional artist artwork lookup. Packaged releases may include an app-level project key when allowed by the release maintainer.
+The app can use fanart.tv for optional artist artwork lookup. Packaged releases may include an app-level Project API Key so basic fanart.tv lookups work out of the box.
 
 Users may optionally add their own fanart.tv Personal API Key during installation or later here:
 
@@ -88,11 +96,14 @@ The hidden `.jukebox_download_wizard` folder contains app internals, bundled too
 - MP3 audio downloads use the best available audio and can still generate standard marquee artwork.
 - The Create MP3s from MP4s tool converts selected MP4 files from local, USB, or SSD folders into MP3 files in the app downloads folder.
 - Downloaded videos are saved in the visible app downloads folder: `C:\Program Files (x86)\Jukebox Download Wizard\downloads`.
-- Generated marquees are saved in the visible app downloads\marquee folder.
+- Generated marquees are saved under the visible app downloads\marquees folder, separated by type: `standard`, `full_color`, and `animated`.
+- Animated marquees are 1920x360 H.264 MP4 files designed to loop cleanly when replayed by the BitLCD/player.
 - App logs are saved in the logs folder.
 - Moving MP4s to SSD targets an existing `\ha8800_screensaver\` folder or selected subfolder.
 - Moving BitLCD artwork targets an existing `\bitlcd\thirdparty\OneSauce\` folder or a selected folder inside it.
 - Generate Missing MP4 Marquees can create marquee artwork for selected MP4 files from another local, USB, or SSD directory.
+
+Generated marquees may include third-party album artwork, artist artwork, logos, and music metadata. Use generated artwork only for personal/local display unless you have the rights or permission needed to redistribute it.
 
 ## Third-party notices
 

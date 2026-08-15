@@ -1,6 +1,7 @@
 ﻿param(
     [Parameter(Mandatory=$true)][string]$DownloadDir,
-    [int]$TotalLimit = 75
+    [int]$TotalLimit = 97,
+    [string]$PathList = ''
 )
 
 if (-not (Test-Path -LiteralPath $DownloadDir)) { return }
@@ -20,7 +21,24 @@ function Repair-UnknownArtistName {
 
     return $candidate
 }
-Get-ChildItem -LiteralPath $DownloadDir -File | ForEach-Object {
+
+function Get-CleanupTargets {
+    if (-not [string]::IsNullOrWhiteSpace($PathList) -and (Test-Path -LiteralPath $PathList)) {
+        $downloadRoot = (Resolve-Path -LiteralPath $DownloadDir).Path.TrimEnd('\')
+        return @(Get-Content -LiteralPath $PathList -ErrorAction SilentlyContinue | ForEach-Object {
+            $path = ([string]$_).Trim()
+            if ([string]::IsNullOrWhiteSpace($path) -or -not (Test-Path -LiteralPath $path)) { return }
+            $item = Get-Item -LiteralPath $path -ErrorAction SilentlyContinue
+            if ($null -eq $item -or $item.PSIsContainer) { return }
+            if ($item.DirectoryName.TrimEnd('\') -ine $downloadRoot) { return }
+            $item
+        })
+    }
+
+    return @(Get-ChildItem -LiteralPath $DownloadDir -File)
+}
+
+Get-CleanupTargets | ForEach-Object {
     $ext = $_.Extension
     $BaseLimit = [Math]::Max(1, $TotalLimit - $ext.Length)
     $name = Repair-UnknownArtistName $_.BaseName
@@ -29,7 +47,7 @@ Get-ChildItem -LiteralPath $DownloadDir -File | ForEach-Object {
     $name = $name.Normalize('FormD') -replace '\p{Mn}', ''
     $name = $name -replace '\[', '(' -replace '\]', ')'
     $name = $name -replace '_+', ' '
-    $name = $name -replace "[^A-Za-z0-9 '`$!&@\-\._\(\)]", ' '
+    $name = $name -replace "[^A-Za-z0-9 '`$!&,@\-\._\(\)]", ' '
     $name = $name -replace '\s+', ' '
     $name = $name.Trim(' ', '.', '_', '-')
     if ([string]::IsNullOrWhiteSpace($name)) { $name = 'video' }
