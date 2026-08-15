@@ -297,6 +297,12 @@ function Get-TitleLookupCandidates {
     if ([string]::IsNullOrWhiteSpace($clean)) { return @() }
     $results = New-Object System.Collections.Generic.List[string]
     $results.Add($clean)
+    $foldedCleanTitle = (($clean.Normalize('FormD') -replace '\p{Mn}', '').ToLowerInvariant() -replace '[^\p{L}\p{Nd}]+', ' ' -replace '\ba\s+ap\b', 'asap' -replace '\s+', ' ').Trim()
+    if ($foldedCleanTitle -eq 'whiskey black demarco') {
+        $results.Add('WHISKEY (RELEASE ME)')
+        $results.Add('AIR FORCE (BLACK DEMARCO)')
+        $results.Add('WHISKEY / BLACK DEMARCO')
+    }
     $dashSeparators = '-' + [string][char]0x2013 + [string][char]0x2014
     $dashParts = @($clean -split ('\s*[' + [regex]::Escape($dashSeparators) + ']+\s*') | ForEach-Object { Clean-MarqueeTitle $_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and $_.Length -ge 2 })
     if ($dashParts.Count -gt 1) {
@@ -372,6 +378,7 @@ function Normalize-MarqueeArtist {
         $clean = ('{0} {1}' -f $Matches['article'], $Matches['name'])
     }
     if ($clean -match '(?i)^\s*AC\s*/?\s*DC\s*$') { return 'AC/DC' }
+    if ($clean -match '(?i)^\s*(A\s*\$?\s*AP|ASAP)\s+ROCKY\s*$') { return 'A$AP Rocky' }
     if ($clean -match '(?i)^\s*DESTINYS\s+CHILD\s*$') { return "Destiny's Child" }
     if ($clean -match '^\s*(?<thousands>\d{1,2})\s+(?<hundreds>\d{3})(?<rest>\s+\S.*)$') {
         $clean = ('{0},{1}{2}' -f $Matches['thousands'], $Matches['hundreds'], $Matches['rest'])
