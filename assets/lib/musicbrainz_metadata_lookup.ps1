@@ -40,6 +40,19 @@ function Repair-TextEncoding {
     $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0092), '-'
     $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0093), '-'
     $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0094), '-'
+    $Value = $Value -replace [string][char]0x00b4, "'"
+    $Value = $Value -replace [string][char]0x0060, "'"
+    $Value = $Value -replace [string][char]0x02bc, "'"
+    $Value = $Value -replace [string][char]0x2018, "'"
+    $Value = $Value -replace [string][char]0x2019, "'"
+    $Value = $Value -replace [string][char]0x201c, '"'
+    $Value = $Value -replace [string][char]0x201d, '"'
+    $Value = $Value -replace [string][char]0x2010, '-'
+    $Value = $Value -replace [string][char]0x2011, '-'
+    $Value = $Value -replace [string][char]0x2012, '-'
+    $Value = $Value -replace [string][char]0x2013, '-'
+    $Value = $Value -replace [string][char]0x2014, '-'
+    $Value = $Value -replace [string][char]0x2212, '-'
     $Value = $Value -replace '[\p{Cc}\p{Cf}]', ' '
     $Value = $Value -replace '\s+', ' '
     if ($Value.IndexOf([char]0x00c3) -lt 0 -and $Value.IndexOf([char]0x00c2) -lt 0) { return $Value }
@@ -103,7 +116,7 @@ function Remove-TitleNoise {
 function Get-QueryParts {
     param([string]$ArtistValue, [string]$TitleValue)
 
-    $resolvedArtist = if ($null -eq $ArtistValue) { '' } else { $ArtistValue.Trim() }
+    $resolvedArtist = if ($null -eq $ArtistValue) { '' } else { (Repair-TextEncoding $ArtistValue).Trim() }
     $resolvedTitle = if ($null -eq $TitleValue) { '' } else { Remove-TitleNoise $TitleValue.Trim() }
 
     if ((-not (Test-KnownArtist $resolvedArtist)) -and $resolvedTitle -match '^\s*(?<artist>[^-|:]+?)\s+[-|:]\s+(?<title>.+?)\s*$') {
@@ -634,7 +647,7 @@ New-Item -ItemType Directory -Path $CacheDir -Force | Out-Null
 $cachePrefix = if (Test-KnownArtist $Artist) { $Artist } else { 'unknown_artist' }
 $cacheRelease = if ([string]::IsNullOrWhiteSpace($ReleaseTitle)) { 'no_release' } else { $ReleaseTitle }
 $cacheYear = if ([string]::IsNullOrWhiteSpace($ReleaseYear)) { 'no_year' } else { $ReleaseYear }
-$cacheKey = Get-SafeCacheName ('v28 - ' + $LookupMode + ' - ' + $cachePrefix + ' - ' + $Title + ' - ' + $cacheRelease + ' - ' + $cacheYear)
+$cacheKey = Get-SafeCacheName ('v29 - ' + $LookupMode + ' - ' + $cachePrefix + ' - ' + $Title + ' - ' + $cacheRelease + ' - ' + $cacheYear)
 $cachePath = Join-Path $CacheDir ($cacheKey + '.metadata.json')
 $missPath = Join-Path $CacheDir ($cacheKey + '.metadata.miss')
 

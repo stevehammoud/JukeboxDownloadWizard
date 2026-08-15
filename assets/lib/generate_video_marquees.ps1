@@ -321,6 +321,19 @@ function Repair-TextEncoding {
     $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0092), '-'
     $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0093), '-'
     $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0094), '-'
+    $Value = $Value -replace [string][char]0x00b4, "'"
+    $Value = $Value -replace [string][char]0x0060, "'"
+    $Value = $Value -replace [string][char]0x02bc, "'"
+    $Value = $Value -replace [string][char]0x2018, "'"
+    $Value = $Value -replace [string][char]0x2019, "'"
+    $Value = $Value -replace [string][char]0x201c, '"'
+    $Value = $Value -replace [string][char]0x201d, '"'
+    $Value = $Value -replace [string][char]0x2010, '-'
+    $Value = $Value -replace [string][char]0x2011, '-'
+    $Value = $Value -replace [string][char]0x2012, '-'
+    $Value = $Value -replace [string][char]0x2013, '-'
+    $Value = $Value -replace [string][char]0x2014, '-'
+    $Value = $Value -replace [string][char]0x2212, '-'
     $Value = $Value -replace '[\p{Cc}\p{Cf}]', ' '
     $Value = $Value -replace '\s+', ' '
     if ($Value.IndexOf([char]0x00c3) -lt 0 -and $Value.IndexOf([char]0x00c2) -lt 0) { return $Value.Trim() }

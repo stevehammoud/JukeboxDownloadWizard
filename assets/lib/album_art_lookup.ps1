@@ -45,11 +45,47 @@ function Test-KnownArtist {
     return (-not [string]::IsNullOrWhiteSpace($Value) -and $Value.Trim() -ine 'UNKNOWN ARTIST')
 }
 
+function Repair-SearchText {
+    param([string]$Value)
+    if ([string]::IsNullOrWhiteSpace($Value)) { return '' }
+    $Value = $Value -replace ([string][char]0xfffd + '\??'), ''
+    $Value = $Value -replace [string][char]0xfffd, ''
+    $Value = $Value -replace ([string][char]0x00c2 + [char]0x00a0), ' '
+    $Value = $Value -replace [string][char]0x00a0, ' '
+    $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x00a6), '...'
+    $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x00a2), '-'
+    $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0099), "'"
+    $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0098), "'"
+    $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x009c), '"'
+    $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x009d), '"'
+    $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0090), '-'
+    $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0091), '-'
+    $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0092), '-'
+    $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0093), '-'
+    $Value = $Value -replace ([string][char]0x00e2 + [char]0x0080 + [char]0x0094), '-'
+    $Value = $Value -replace [string][char]0x00b4, "'"
+    $Value = $Value -replace [string][char]0x0060, "'"
+    $Value = $Value -replace [string][char]0x02bc, "'"
+    $Value = $Value -replace [string][char]0x2018, "'"
+    $Value = $Value -replace [string][char]0x2019, "'"
+    $Value = $Value -replace [string][char]0x201c, '"'
+    $Value = $Value -replace [string][char]0x201d, '"'
+    $Value = $Value -replace [string][char]0x2010, '-'
+    $Value = $Value -replace [string][char]0x2011, '-'
+    $Value = $Value -replace [string][char]0x2012, '-'
+    $Value = $Value -replace [string][char]0x2013, '-'
+    $Value = $Value -replace [string][char]0x2014, '-'
+    $Value = $Value -replace [string][char]0x2212, '-'
+    $Value = $Value -replace '[\p{Cc}\p{Cf}]', ' '
+    $Value = $Value -replace '\s+', ' '
+    return $Value.Trim()
+}
+
 function Get-AlbumQueryParts {
     param([string]$ArtistValue, [string]$TitleValue)
 
-    $resolvedArtist = if ($null -eq $ArtistValue) { '' } else { $ArtistValue.Trim() }
-    $resolvedTitle = if ($null -eq $TitleValue) { '' } else { $TitleValue.Trim() }
+    $resolvedArtist = if ($null -eq $ArtistValue) { '' } else { Repair-SearchText $ArtistValue }
+    $resolvedTitle = if ($null -eq $TitleValue) { '' } else { Repair-SearchText $TitleValue }
 
     if ((-not (Test-KnownArtist $resolvedArtist)) -and $resolvedTitle -match '^\s*(?<artist>[^-|:]+?)\s+[-|:]\s+(?<title>.+?)\s*$') {
         $resolvedArtist = $Matches['artist'].Trim()
@@ -102,7 +138,7 @@ function Try-DownloadReleaseGroupCover {
 function Get-NormalizedText {
     param([string]$Value)
     if ([string]::IsNullOrWhiteSpace($Value)) { return '' }
-    $text = $Value.Normalize('FormD') -replace '\p{Mn}', ''
+    $text = (Repair-SearchText $Value).Normalize('FormD') -replace '\p{Mn}', ''
     $text = $text.ToLowerInvariant()
     $text = $text -replace '\bac\s*/?\s*dc\b', 'acdc'
     $text = $text -replace '\b(ft|feat|featuring|with|and|y|con|x)\b', ' '
@@ -115,10 +151,11 @@ function Get-NormalizedText {
 function Get-AppleArtworkUrl {
     param([string]$ArtistValue, [string]$ReleaseTitleValue, [string]$TitleValue)
 
-    $searchTitle = if (-not [string]::IsNullOrWhiteSpace($ReleaseTitleValue)) { $ReleaseTitleValue } else { $TitleValue }
+    $searchTitle = if (-not [string]::IsNullOrWhiteSpace($ReleaseTitleValue)) { Repair-SearchText $ReleaseTitleValue } else { Repair-SearchText $TitleValue }
     if ([string]::IsNullOrWhiteSpace($searchTitle)) { return '' }
 
-    $term = if (Test-KnownArtist $ArtistValue) { ($ArtistValue + ' ' + $searchTitle) } else { $searchTitle }
+    $artistTerm = Repair-SearchText $ArtistValue
+    $term = if (Test-KnownArtist $artistTerm) { ($artistTerm + ' ' + $searchTitle) } else { $searchTitle }
     $url = 'https://itunes.apple.com/search?term=' + [uri]::EscapeDataString($term) + '&entity=album&limit=8'
     try {
         $result = Invoke-RestMethod -Uri $url -TimeoutSec 12
@@ -185,7 +222,7 @@ if (([string]::IsNullOrWhiteSpace($Title) -and [string]::IsNullOrWhiteSpace($Rel
 
 New-Item -ItemType Directory -Path $CacheDir -Force | Out-Null
 $cachePrefix = if (Test-KnownArtist $Artist) { $Artist } else { 'unknown_artist' }
-$cacheKeySource = if (-not [string]::IsNullOrWhiteSpace($ReleaseMbid)) { $LookupMode + ' - release-v6 - ' + $ReleaseMbid } else { $LookupMode + ' - title-v4 - ' + $cachePrefix + ' - ' + $Title + ' - ' + $ReleaseTitle }
+$cacheKeySource = if (-not [string]::IsNullOrWhiteSpace($ReleaseMbid)) { $LookupMode + ' - release-v7 - ' + $ReleaseMbid } else { $LookupMode + ' - title-v5 - ' + $cachePrefix + ' - ' + $Title + ' - ' + $ReleaseTitle }
 $cacheKey = Get-SafeCacheName $cacheKeySource
 $coverPath = Join-Path $CacheDir ($cacheKey + '.jpg')
 $missPath = Join-Path $CacheDir ($cacheKey + '.miss')
