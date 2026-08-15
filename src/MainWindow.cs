@@ -127,6 +127,14 @@ private const string AppVersion = "0.3.0.0";
             }
         }
 
+        private enum CacheClearScope
+        {
+            None,
+            Video,
+            Marquee,
+            Both
+        }
+
         public MainWindow()
         {
             packageRoot = AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
@@ -301,16 +309,19 @@ private const string AppVersion = "0.3.0.0";
             Button showConsoleButton = Button("Show Console Window", double.NaN, 32);
             Button generateMissingMarqueesButton = Button("Generate Missing MP4 Marquees", double.NaN, 32);
             Button convertMp4ToMp3Button = Button("Create MP3s from MP4s", double.NaN, 32);
+            Button clearCacheButton = Button("Clear Cache...", double.NaN, 32);
             Button viewGeneratedMarqueesButton = Button("View Generated Marquees on PC", double.NaN, 32);
             validateButton.Margin = new Thickness(0, 8, 0, 0);
             showConsoleButton.Margin = new Thickness(0, 8, 0, 0);
             generateMissingMarqueesButton.Margin = new Thickness(0, 8, 0, 0);
             convertMp4ToMp3Button.Margin = new Thickness(0, 8, 0, 0);
+            clearCacheButton.Margin = new Thickness(0, 8, 0, 0);
             viewGeneratedMarqueesButton.Margin = new Thickness(0, 8, 0, 0);
             left.Children.Add(validateButton);
             left.Children.Add(showConsoleButton);
             left.Children.Add(generateMissingMarqueesButton);
             left.Children.Add(convertMp4ToMp3Button);
+            left.Children.Add(clearCacheButton);
             left.Children.Add(viewGeneratedMarqueesButton);
             GridSplitter leftSplitter = VerticalSplitter();
             Grid.SetColumn(leftSplitter, 1);
@@ -429,6 +440,7 @@ private const string AppVersion = "0.3.0.0";
             AddActionControl(moveBitLcdArtworkButton);
             AddActionControl(generateMissingMarqueesButton);
             AddActionControl(convertMp4ToMp3Button);
+            AddActionControl(clearCacheButton);
 
             refreshButton.Click += delegate { RefreshUrls(); };
             updateButton.Click += delegate { UpdateUrlList(); };
@@ -454,6 +466,7 @@ private const string AppVersion = "0.3.0.0";
             moveBitLcdArtworkButton.Click += delegate { MoveBitLcdArtwork(); };
             generateMissingMarqueesButton.Click += delegate { GenerateMissingMarquees(); };
             convertMp4ToMp3Button.Click += delegate { ConvertMp4FilesToMp3(); };
+            clearCacheButton.Click += delegate { ClearCacheWithPrompt(); };
             viewGeneratedMarqueesButton.Click += delegate { OpenGeneratedMarqueesFolder(); };
         }
 
@@ -3369,6 +3382,139 @@ private const string AppVersion = "0.3.0.0";
             {
                 return false;
             }
+        }
+
+        private void ClearCacheWithPrompt()
+        {
+            CacheClearScope scope = ChooseCacheClearScope();
+            if (scope == CacheClearScope.None) { return; }
+
+            MessageBoxResult confirm = ShowAppDialog(
+                "This will remove saved lookup results for the selected cache type. The app will rebuild those results the next time you search or generate marquees.",
+                "Clear Cache",
+                MessageBoxButton.YesNo);
+            if (confirm != MessageBoxResult.Yes) { return; }
+
+            int removed = 0;
+            try
+            {
+                if (scope == CacheClearScope.Video || scope == CacheClearScope.Both)
+                {
+                    removed += DeleteCacheFile(Path.Combine(resourceCacheDir, "jukebox_url_metadata_cache.json"));
+                    removed += DeleteCacheFile(GetVideoDisplayLabelCacheFile());
+                    urlDisplayLabels.Clear();
+                }
+
+                if (scope == CacheClearScope.Marquee || scope == CacheClearScope.Both)
+                {
+                    removed += ClearCacheDirectory(Path.Combine(resourceCacheDir, "album_art"));
+                    removed += ClearCacheDirectory(Path.Combine(resourceCacheDir, "musicbrainz_metadata"));
+                    removed += ClearCacheDirectory(Path.Combine(resourceCacheDir, "artist_art"));
+                }
+
+                Directory.CreateDirectory(resourceCacheDir);
+                ShowAppInfo("Cache cleared. Removed " + removed.ToString() + " cached item" + (removed == 1 ? "." : "s."), "Clear Cache");
+            }
+            catch (Exception ex)
+            {
+                ShowAppInfo("Cache clear failed: " + ex.Message, "Clear Cache");
+            }
+        }
+
+        private CacheClearScope ChooseCacheClearScope()
+        {
+            Window dialog = new Window
+            {
+                Title = "Clear Cache",
+                Owner = this,
+                Width = 430,
+                SizeToContent = SizeToContent.Height,
+                ResizeMode = ResizeMode.NoResize,
+                WindowStartupLocation = WindowStartupLocation.Manual,
+                Background = Brush("#0B1020"),
+                ShowInTaskbar = false
+            };
+
+            CacheClearScope selected = CacheClearScope.None;
+            StackPanel root = new StackPanel { Margin = new Thickness(18) };
+            dialog.Content = root;
+            root.Children.Add(new TextBlock { Text = "Choose which cache to clear:", FontWeight = FontWeights.SemiBold, Foreground = Brush("#FFFFFF"), Margin = new Thickness(0, 0, 0, 8) });
+            root.Children.Add(new TextBlock { Text = "Video cache stores YouTube review/search results. Marquee cache stores MusicBrainz, album cover, artist image, and logo lookups.", TextWrapping = TextWrapping.Wrap, Foreground = Brush("#CBD5E1"), FontSize = 12, Margin = new Thickness(0, 0, 0, 14) });
+
+            Button video = CacheDialogButton("Video Cache");
+            Button marquee = CacheDialogButton("Marquee Cache");
+            Button both = CacheDialogButton("Both");
+            Button cancel = CacheDialogButton("Cancel");
+            video.Click += delegate { selected = CacheClearScope.Video; dialog.DialogResult = true; };
+            marquee.Click += delegate { selected = CacheClearScope.Marquee; dialog.DialogResult = true; };
+            both.Click += delegate { selected = CacheClearScope.Both; dialog.DialogResult = true; };
+            cancel.Click += delegate { selected = CacheClearScope.None; dialog.DialogResult = false; };
+
+            root.Children.Add(video);
+            root.Children.Add(marquee);
+            root.Children.Add(both);
+            cancel.Background = Brush("#1F2937");
+            cancel.BorderBrush = Brush("#374151");
+            root.Children.Add(cancel);
+
+            dialog.SourceInitialized += delegate
+            {
+                double ownerWidth = ActualWidth > 0 ? ActualWidth : Width;
+                double ownerHeight = ActualHeight > 0 ? ActualHeight : Height;
+                dialog.Left = Left + Math.Max(0, (ownerWidth - dialog.ActualWidth) / 2);
+                dialog.Top = Top + Math.Max(0, (ownerHeight - dialog.ActualHeight) / 2);
+            };
+            dialog.ShowDialog();
+            return selected;
+        }
+
+        private Button CacheDialogButton(string text)
+        {
+            Button button = Button(text, double.NaN, 34);
+            button.Margin = new Thickness(0, 0, 0, 8);
+            button.HorizontalAlignment = HorizontalAlignment.Stretch;
+            return button;
+        }
+
+        private int DeleteCacheFile(string path)
+        {
+            try
+            {
+                if (!File.Exists(path)) { return 0; }
+                File.Delete(path);
+                return 1;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        private int ClearCacheDirectory(string folder)
+        {
+            int removed = 0;
+            if (!Directory.Exists(folder)) { return 0; }
+
+            foreach (string file in Directory.GetFiles(folder, "*", SearchOption.AllDirectories))
+            {
+                try
+                {
+                    File.Delete(file);
+                    removed++;
+                }
+                catch
+                {
+                }
+            }
+
+            foreach (string directory in Directory.GetDirectories(folder, "*", SearchOption.AllDirectories))
+            {
+                try { Directory.Delete(directory, false); }
+                catch { }
+            }
+
+            Directory.CreateDirectory(folder);
+            return removed;
         }
 
         private void ShowAppInfo(string message, string title)

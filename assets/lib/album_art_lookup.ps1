@@ -185,7 +185,7 @@ if (([string]::IsNullOrWhiteSpace($Title) -and [string]::IsNullOrWhiteSpace($Rel
 
 New-Item -ItemType Directory -Path $CacheDir -Force | Out-Null
 $cachePrefix = if (Test-KnownArtist $Artist) { $Artist } else { 'unknown_artist' }
-$cacheKeySource = if (-not [string]::IsNullOrWhiteSpace($ReleaseMbid)) { $LookupMode + ' - release-v5 - ' + $ReleaseMbid } else { $LookupMode + ' - title-v3 - ' + $cachePrefix + ' - ' + $Title + ' - ' + $ReleaseTitle }
+$cacheKeySource = if (-not [string]::IsNullOrWhiteSpace($ReleaseMbid)) { $LookupMode + ' - release-v6 - ' + $ReleaseMbid } else { $LookupMode + ' - title-v4 - ' + $cachePrefix + ' - ' + $Title + ' - ' + $ReleaseTitle }
 $cacheKey = Get-SafeCacheName $cacheKeySource
 $coverPath = Join-Path $CacheDir ($cacheKey + '.jpg')
 $missPath = Join-Path $CacheDir ($cacheKey + '.miss')

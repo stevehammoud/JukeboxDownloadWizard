@@ -634,7 +634,7 @@ New-Item -ItemType Directory -Path $CacheDir -Force | Out-Null
 $cachePrefix = if (Test-KnownArtist $Artist) { $Artist } else { 'unknown_artist' }
 $cacheRelease = if ([string]::IsNullOrWhiteSpace($ReleaseTitle)) { 'no_release' } else { $ReleaseTitle }
 $cacheYear = if ([string]::IsNullOrWhiteSpace($ReleaseYear)) { 'no_year' } else { $ReleaseYear }
-$cacheKey = Get-SafeCacheName ('v27 - ' + $LookupMode + ' - ' + $cachePrefix + ' - ' + $Title + ' - ' + $cacheRelease + ' - ' + $cacheYear)
+$cacheKey = Get-SafeCacheName ('v28 - ' + $LookupMode + ' - ' + $cachePrefix + ' - ' + $Title + ' - ' + $cacheRelease + ' - ' + $cacheYear)
 $cachePath = Join-Path $CacheDir ($cacheKey + '.metadata.json')
 $missPath = Join-Path $CacheDir ($cacheKey + '.metadata.miss')
 

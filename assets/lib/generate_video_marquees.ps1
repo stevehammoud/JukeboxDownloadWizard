@@ -120,6 +120,8 @@ $Fps = 30
 $Seconds = 7
 $FrameCount = $Fps * $Seconds
 $FullColorStillFrame = [int][Math]::Round(3.5 * $Fps)
+$PanelArtSize = 320
+$PanelEdgeMargin = 48
 
 function New-Color {
     param([int]$R, [int]$G, [int]$B, [int]$A = 255)
@@ -3118,16 +3120,16 @@ try {
                 if ($albumImage -ne $null) {
                     if ($motionName -eq 'LoopAlive') {
                         $albumAlpha = 255
-                        $albumSize = 320
-                        $albumX = 48
+                        $albumSize = $PanelArtSize
+                        $albumX = $PanelEdgeMargin
                         $albumLoopT = $t
                         $albumScrollRange = $Height + $albumSize
                         $albumY = [int](-$albumSize + ($albumScrollRange * $albumLoopT))
                         $albumShadowAlpha = 0
                     } elseif ($motionName -eq 'LoopAliveClassic') {
                         $albumAlpha = 255
-                        $albumSize = 320
-                        $albumX = 48
+                        $albumSize = $PanelArtSize
+                        $albumX = $PanelEdgeMargin
                         $albumBouncePhase = [Math]::Sin($t * [Math]::PI * 2.0 * 3.0)
                         $albumBounceY = [int](8 * $albumBouncePhase)
                         $albumShadowAlpha = [int](28 + (62 * (Clamp01 (($albumBouncePhase + 1.0) / 2.0))))
@@ -3137,8 +3139,8 @@ try {
                         $outT = Ease-OutCubic (($t - 0.82) / 0.13)
                         $albumAlpha = [int](255 * (Clamp01 (($t - 0.02) / 0.18)) * (1.0 - (Clamp01 $outT)))
                         $albumSize = [int](310 + (8 * [Math]::Sin($t * [Math]::PI * 2.0)))
-                        $albumX = [int](Lerp -A -320 -B 48 -T $inT)
-                        $albumX = [int](Lerp -A $albumX -B -320 -T $outT)
+                        $albumX = [int](Lerp -A (-$PanelArtSize) -B $PanelEdgeMargin -T $inT)
+                        $albumX = [int](Lerp -A $albumX -B (-$PanelArtSize) -T $outT)
                         $albumBounceY = 0
                         $albumShadowAlpha = 0
                         $albumY = [int](($Height - $albumSize) / 2) + $albumBounceY
@@ -3167,8 +3169,8 @@ try {
                 }
 
                 $rightAlpha = 255
-                $rightSize = 320
-                $rightMargin = 48
+                $rightSize = $PanelArtSize
+                $rightMargin = $PanelEdgeMargin
                 $rightX = $Width - $rightMargin - $rightSize
                 $rightY = [int](($Height - $rightSize) / 2)
                 $rightRect = New-Object Drawing.Rectangle $rightX, $rightY, $rightSize, $rightSize
@@ -3355,8 +3357,8 @@ try {
 
                         Draw-TemplateBackground -Graphics $stillG -TemplateName $templateName -T $t -Accent $accent -Accent2 $accent2 -Pink $pink -Cyan $cyan -DarkStroke $darkStroke -Width $Width -Height $Height -TemplateVariant $templateVariantValue
 
-                        $stillAlbumSize = 320
-                        $stillAlbumX = 48
+                        $stillAlbumSize = $PanelArtSize
+                        $stillAlbumX = $PanelEdgeMargin
                         $stillAlbumY = [int](($Height - $stillAlbumSize) / 2)
                         $stillRightX = $Width - $stillAlbumX - $stillAlbumSize
                         $stillLeftRect = New-Object Drawing.Rectangle $stillAlbumX, $stillAlbumY, $stillAlbumSize, $stillAlbumSize
@@ -3370,13 +3372,7 @@ try {
                             }
                         }
                         if ($rightImage -ne $null) {
-                            if ($rightArtworkKind -eq 'artist_logo') {
-                                Draw-ArtistLogoLayer -Graphics $stillG -Image $rightImage -Bounds ([Drawing.RectangleF]$stillRightRect) -GlowColor $accent -GlowColor2 $accent2 -T $t -Alpha 255
-                            } elseif ($rightArtworkKind -eq 'logo') {
-                                Draw-RotatingLogoTile -Graphics $stillG -Image $rightImage -Rect $stillRightRect -Alpha 255 -T $t
-                            } else {
-                                Draw-ImageCover -Graphics $stillG -Image $rightImage -Rect $stillRightRect -Alpha 255
-                            }
+                            Draw-ImageCover -Graphics $stillG -Image $rightImage -Rect $stillRightRect -Alpha 255
                         }
 
                         $stillTitleText = [string]($parts['Title'])

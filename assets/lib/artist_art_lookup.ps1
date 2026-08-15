@@ -146,7 +146,7 @@ function Get-WikimediaImage {
 if ([string]::IsNullOrWhiteSpace($ArtistMbid) -or [string]::IsNullOrWhiteSpace($CacheDir)) { return }
 New-Item -ItemType Directory -Path $CacheDir -Force | Out-Null
 
-$cacheName = Get-SafeCacheName (($ArtistMbid + ' ' + $Artist + ' ' + $AssetType).Trim())
+$cacheName = Get-SafeCacheName (('v2 ' + $ArtistMbid + ' ' + $Artist + ' ' + $AssetType).Trim())
 $imagePrefix = Join-Path $CacheDir $cacheName
 $imagePath = Join-Path $CacheDir ($cacheName + '_wikimedia.jpg')
 $missPath = Join-Path $CacheDir ($cacheName + '.miss')
