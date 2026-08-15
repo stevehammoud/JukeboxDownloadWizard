@@ -107,6 +107,7 @@ function Get-NormalizedText {
     $text = $text -replace '\bac\s*/?\s*dc\b', 'acdc'
     $text = $text -replace '\b(ft|feat|featuring|with|and|y|con|x)\b', ' '
     $text = $text -replace '[^\p{L}\p{Nd}]+', ' '
+    $text = $text -replace '\ba\s+ap\b', 'asap'
     $text = $text -replace '\s+', ' '
     return $text.Trim()
 }
