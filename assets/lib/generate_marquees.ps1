@@ -222,7 +222,7 @@ function Get-AlbumCoverPath {
         $releaseMbid = [string]$Parts['ReleaseMbid']
         $releaseTitle = [string]$Parts['ReleaseTitle']
         if ([string]::IsNullOrWhiteSpace($title) -and [string]::IsNullOrWhiteSpace($releaseMbid)) { return '' }
-        $cover = & powershell -NoProfile -ExecutionPolicy Bypass -File $AlbumArtLookupScript -Artist $artist -Title $title -CacheDir $CacheDir -ReleaseMbid $releaseMbid -ReleaseTitle $releaseTitle 2>$null | Select-Object -First 1
+        $cover = & powershell -NoProfile -ExecutionPolicy Bypass -File $AlbumArtLookupScript -Artist $artist -Title $title -CacheDir $CacheDir -ReleaseMbid $releaseMbid -ReleaseTitle $releaseTitle -LookupMode 'standard' 2>$null | Select-Object -First 1
         if ($cover -and (Test-Path -LiteralPath $cover)) { return [string]$cover }
     }
     catch {
@@ -237,7 +237,7 @@ function Get-MusicBrainzTextParts {
         foreach ($candidate in $candidates) {
             if ([string]::IsNullOrWhiteSpace($candidate['Title'])) { continue }
             $releaseCandidate = [string]$candidate['ReleaseTitle']
-            $args = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $MusicBrainzMetadataScript, '-Artist', $candidate['Artist'], '-Title', $candidate['Title'], '-CacheDir', $MetadataCacheDir)
+            $args = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $MusicBrainzMetadataScript, '-Artist', $candidate['Artist'], '-Title', $candidate['Title'], '-CacheDir', $MetadataCacheDir, '-LookupMode', 'standard')
             if (-not [string]::IsNullOrWhiteSpace($releaseCandidate)) {
                 $args += @('-ReleaseTitle', $releaseCandidate)
             }
@@ -248,8 +248,14 @@ function Get-MusicBrainzTextParts {
             if ([string]::IsNullOrWhiteSpace($json)) { continue }
             $metadata = $json | ConvertFrom-Json
             $artist = Normalize-MarqueeArtist ([string]$metadata.Artist)
-            $title = Clean-MarqueeTitle ([string]$metadata.Title)
+            $filenameArtist = Normalize-MarqueeArtist ([string]$Parts['Artist'])
+            $title = Clean-MarqueeTitle ([string]$Parts['Title'])
             if ([string]::IsNullOrWhiteSpace($artist)) { $artist = [string]$candidate['Artist'] }
+            if ((-not [string]::IsNullOrWhiteSpace($filenameArtist)) -and $filenameArtist -ine 'UNKNOWN ARTIST') {
+                $foldedArtist = (($artist.Normalize('FormD') -replace '\p{Mn}', '').ToLowerInvariant() -replace '\bac\s*/?\s*dc\b', 'acdc' -replace '\b(ft|feat|featuring|with|and|y|con|x)\b', ' ' -replace '[^\p{L}\p{Nd}]+', ' ' -replace '\s+', ' ').Trim()
+                $foldedFilenameArtist = (($filenameArtist.Normalize('FormD') -replace '\p{Mn}', '').ToLowerInvariant() -replace '\bac\s*/?\s*dc\b', 'acdc' -replace '\b(ft|feat|featuring|with|and|y|con|x)\b', ' ' -replace '[^\p{L}\p{Nd}]+', ' ' -replace '\s+', ' ').Trim()
+                if ([string]::IsNullOrWhiteSpace($foldedArtist) -or [string]::IsNullOrWhiteSpace($foldedFilenameArtist) -or (($foldedArtist -ne $foldedFilenameArtist) -and ($foldedArtist -notmatch ('(^| )' + [regex]::Escape($foldedFilenameArtist) + '( |$)')) -and ($foldedFilenameArtist -notmatch ('(^| )' + [regex]::Escape($foldedArtist) + '( |$)')))) { $artist = $filenameArtist }
+            }
             if ([string]::IsNullOrWhiteSpace($title)) { $title = [string]$candidate['Title'] }
             return @{
                 Artist = $artist.Trim().ToUpperInvariant()

@@ -3,7 +3,9 @@ param(
     [string]$Title = '',
     [string]$CacheDir = '',
     [string]$ReleaseMbid = '',
-    [string]$ReleaseTitle = ''
+    [string]$ReleaseTitle = '',
+    [ValidateSet('standard', 'curated')]
+    [string]$LookupMode = 'standard'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -20,7 +22,7 @@ function Get-SafeCacheName {
 
 function Invoke-MusicBrainzJson {
     param([string]$Url)
-$headers = @{ 'User-Agent' = 'JukeboxDownloadWizard/0.3.0.0 ( https://musicbrainz.org/ )' }
+    $headers = @{ 'User-Agent' = 'JukeboxDownloadWizard/0.3.0.0 ( https://musicbrainz.org/ )' }
     return Invoke-RestMethod -Uri $Url -Headers $headers -TimeoutSec 12
 }
 
@@ -56,7 +58,11 @@ function Get-AlbumQueryParts {
     if ($resolvedArtist -match '^\s*(?<name>.+?)\s*,\s*(?<article>The|A|An)\s*$') {
         $resolvedArtist = ('{0} {1}' -f $Matches['article'], $Matches['name'])
     }
+    if ($resolvedArtist -match '(?i)^\s*AC[\s_\-\/]*DC\s*$') { $resolvedArtist = 'AC/DC' }
     if ($resolvedArtist -match '(?i)^\s*DESTINYS\s+CHILD\s*$') { $resolvedArtist = "Destiny's Child" }
+    if ($resolvedArtist -match '(?i)^\s*GUNS\s+N\s+ROSES\s*$') { $resolvedArtist = "Guns N' Roses" }
+    if ($resolvedArtist -match '(?i)^\s*CELINE\s+DION\s*$') { $resolvedArtist = ([string]([char]0x0043) + [char]0x00e9 + 'line Dion') }
+    if ($resolvedArtist -match '(?i)^\s*BEYONCE\s*$') { $resolvedArtist = ([string]([char]0x0042) + 'eyonc' + [char]0x00e9) }
     if ($resolvedArtist -match '^\s*(?<thousands>\d{1,2})\s+(?<hundreds>\d{3})(?<rest>\s+\S.*)$') {
         $resolvedArtist = ('{0},{1}{2}' -f $Matches['thousands'], $Matches['hundreds'], $Matches['rest'])
     }
@@ -177,7 +183,7 @@ if (([string]::IsNullOrWhiteSpace($Title) -and [string]::IsNullOrWhiteSpace($Rel
 
 New-Item -ItemType Directory -Path $CacheDir -Force | Out-Null
 $cachePrefix = if (Test-KnownArtist $Artist) { $Artist } else { 'unknown_artist' }
-$cacheKeySource = if (-not [string]::IsNullOrWhiteSpace($ReleaseMbid)) { 'release-v4 - ' + $ReleaseMbid } else { 'title-v2 - ' + $cachePrefix + ' - ' + $Title + ' - ' + $ReleaseTitle }
+$cacheKeySource = if (-not [string]::IsNullOrWhiteSpace($ReleaseMbid)) { $LookupMode + ' - release-v5 - ' + $ReleaseMbid } else { $LookupMode + ' - title-v3 - ' + $cachePrefix + ' - ' + $Title + ' - ' + $ReleaseTitle }
 $cacheKey = Get-SafeCacheName $cacheKeySource
 $coverPath = Join-Path $CacheDir ($cacheKey + '.jpg')
 $missPath = Join-Path $CacheDir ($cacheKey + '.miss')

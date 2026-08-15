@@ -96,7 +96,6 @@ function Invoke-Ffprobe {
 
 $baseName = [IO.Path]::GetFileNameWithoutExtension($VideoPath)
 $outputBaseName = $baseName -replace '\s+\(JUKE\)$', ''
-if ([string]::IsNullOrWhiteSpace($outputBaseName)) { $outputBaseName = $baseName }
 $MarqueeFileNameTotalLimit = 104
 function Get-MarqueeOutputFileName {
     param([string]$BaseName, [string]$Extension)
@@ -337,7 +336,7 @@ function Clean-MarqueeText {
     param([string]$Text)
     if ([string]::IsNullOrWhiteSpace($Text)) { return '' }
     $noiseWords = 'official\s+music\s+video|official\s+video|official\s+audio|official\s+lyric\s+video|official|lyric\s+video|lyrics?|visuali[sz]er|performance\s+video|music\s+video|audio|hd|hq|sd|4k|[0-9]{3,4}p|remaster(?:ed)?|karaoke|unreleased\s+video|new\s+unreleased\s+video|new\s+video'
-    $contextNoiseWords = $noiseWords + '|live(?:\s+(?:at|from|in|on)\b.*)?|sub(?:titula[dd][ao]?|itula[dd][ao]?|titulos?)|espanol|ingles|legendado|traducao|translated|translation'
+    $contextNoiseWords = $noiseWords + '|live\s+(?:at|from|in|on)\b.*|sub(?:titula[dd][ao]?|itula[dd][ao]?|t[ií]tulos?)|espa[nñ]ol|ingl[eé]s|legendado|tradu[cç][aã]o|traducao|translated|translation'
     $clean = (Repair-TextEncoding $Text) -replace '(?i)\s+\(JUKE\)\s*$', ''
     $clean = $clean -replace '[\p{Cc}\p{Cf}]', ' '
     $clean = $clean -replace '(?i)\s+\b(with|w/)\s+lyrics?\b.*$', ''
@@ -572,7 +571,7 @@ function Get-MusicBrainzTextParts {
         foreach ($candidate in $candidates) {
             if ([string]::IsNullOrWhiteSpace($candidate['Title'])) { continue }
             $releaseCandidate = [string]$candidate['ReleaseTitle']
-            $args = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $MusicBrainzMetadataScript, '-Artist', $candidate['Artist'], '-Title', $candidate['Title'], '-CacheDir', $MetadataCacheDir)
+            $args = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $MusicBrainzMetadataScript, '-Artist', $candidate['Artist'], '-Title', $candidate['Title'], '-CacheDir', $MetadataCacheDir, '-LookupMode', 'standard')
             if (-not [string]::IsNullOrWhiteSpace($releaseCandidate)) {
                 $args += @('-ReleaseTitle', $releaseCandidate)
             }
@@ -583,8 +582,14 @@ function Get-MusicBrainzTextParts {
             if ([string]::IsNullOrWhiteSpace($json)) { continue }
             $metadata = $json | ConvertFrom-Json
             $artist = Normalize-MarqueeArtist ([string]$metadata.Artist)
-            $title = Clean-MarqueeTitle ([string]$metadata.Title)
+            $filenameArtist = Normalize-MarqueeArtist ([string]$Parts['Artist'])
+            $title = Clean-MarqueeTitle ([string]$Parts['Title'])
             if ([string]::IsNullOrWhiteSpace($artist)) { $artist = [string]$candidate['Artist'] }
+            if ((-not [string]::IsNullOrWhiteSpace($filenameArtist)) -and $filenameArtist -ine 'UNKNOWN ARTIST') {
+                $foldedArtist = (($artist.Normalize('FormD') -replace '\p{Mn}', '').ToLowerInvariant() -replace '\bac\s*/?\s*dc\b', 'acdc' -replace '\b(ft|feat|featuring|with|and|y|con|x)\b', ' ' -replace '[^\p{L}\p{Nd}]+', ' ' -replace '\s+', ' ').Trim()
+                $foldedFilenameArtist = (($filenameArtist.Normalize('FormD') -replace '\p{Mn}', '').ToLowerInvariant() -replace '\bac\s*/?\s*dc\b', 'acdc' -replace '\b(ft|feat|featuring|with|and|y|con|x)\b', ' ' -replace '[^\p{L}\p{Nd}]+', ' ' -replace '\s+', ' ').Trim()
+                if ([string]::IsNullOrWhiteSpace($foldedArtist) -or [string]::IsNullOrWhiteSpace($foldedFilenameArtist) -or (($foldedArtist -ne $foldedFilenameArtist) -and ($foldedArtist -notmatch ('(^| )' + [regex]::Escape($foldedFilenameArtist) + '( |$)')) -and ($foldedFilenameArtist -notmatch ('(^| )' + [regex]::Escape($foldedArtist) + '( |$)')))) { $artist = $filenameArtist }
+            }
             if ([string]::IsNullOrWhiteSpace($title)) { $title = [string]$candidate['Title'] }
             return @{
                 Artist = $artist.Trim().ToUpperInvariant()
@@ -742,7 +747,6 @@ function Test-AlbumCoverLookupAllowed {
         $releaseYear -match '^(19|20)\d{2}$'
     )
 }
-
 function Get-AlbumCoverPath {
     param([hashtable]$Parts)
     if (-not (Test-Path -LiteralPath $AlbumArtLookupScript)) { return '' }
@@ -752,7 +756,7 @@ function Get-AlbumCoverPath {
         $releaseMbid = [string]$Parts['ReleaseMbid']
         $releaseTitle = [string]$Parts['ReleaseTitle']
         if ([string]::IsNullOrWhiteSpace($title) -and [string]::IsNullOrWhiteSpace($releaseMbid)) { return '' }
-        $cover = & powershell -NoProfile -ExecutionPolicy Bypass -File $AlbumArtLookupScript -Artist $artist -Title $title -CacheDir $CacheDir -ReleaseMbid $releaseMbid -ReleaseTitle $releaseTitle 2>$null | Select-Object -First 1
+        $cover = & powershell -NoProfile -ExecutionPolicy Bypass -File $AlbumArtLookupScript -Artist $artist -Title $title -CacheDir $CacheDir -ReleaseMbid $releaseMbid -ReleaseTitle $releaseTitle -LookupMode 'standard' 2>$null | Select-Object -First 1
         if ($cover -and (Test-Path -LiteralPath $cover)) { return [string]$cover }
     }
     catch {
