@@ -252,8 +252,8 @@ function Get-MusicBrainzTextParts {
             $title = Clean-MarqueeTitle ([string]$Parts['Title'])
             if ([string]::IsNullOrWhiteSpace($artist)) { $artist = [string]$candidate['Artist'] }
             if ((-not [string]::IsNullOrWhiteSpace($filenameArtist)) -and $filenameArtist -ine 'UNKNOWN ARTIST') {
-                $foldedArtist = (($artist.Normalize('FormD') -replace '\p{Mn}', '').ToLowerInvariant() -replace '\bac\s*/?\s*dc\b', 'acdc' -replace '\b(ft|feat|featuring|with|and|y|con|x)\b', ' ' -replace '[^\p{L}\p{Nd}]+', ' ' -replace '\s+', ' ').Trim()
-                $foldedFilenameArtist = (($filenameArtist.Normalize('FormD') -replace '\p{Mn}', '').ToLowerInvariant() -replace '\bac\s*/?\s*dc\b', 'acdc' -replace '\b(ft|feat|featuring|with|and|y|con|x)\b', ' ' -replace '[^\p{L}\p{Nd}]+', ' ' -replace '\s+', ' ').Trim()
+                $foldedArtist = (($artist.Normalize('FormD') -replace '\p{Mn}', '').ToLowerInvariant() -replace '\bac\s*/?\s*dc\b', 'acdc' -replace '\b(ft|feat|featuring|with|and|y|con|x)\b', ' ' -replace '[^\p{L}\p{Nd}]+', ' ' -replace '\ba\s+ap\b', 'asap' -replace '\s+', ' ').Trim()
+                $foldedFilenameArtist = (($filenameArtist.Normalize('FormD') -replace '\p{Mn}', '').ToLowerInvariant() -replace '\bac\s*/?\s*dc\b', 'acdc' -replace '\b(ft|feat|featuring|with|and|y|con|x)\b', ' ' -replace '[^\p{L}\p{Nd}]+', ' ' -replace '\ba\s+ap\b', 'asap' -replace '\s+', ' ').Trim()
                 if ([string]::IsNullOrWhiteSpace($foldedArtist) -or [string]::IsNullOrWhiteSpace($foldedFilenameArtist) -or (($foldedArtist -ne $foldedFilenameArtist) -and ($foldedArtist -notmatch ('(^| )' + [regex]::Escape($foldedFilenameArtist) + '( |$)')) -and ($foldedFilenameArtist -notmatch ('(^| )' + [regex]::Escape($foldedArtist) + '( |$)')))) { $artist = $filenameArtist }
             }
             if ([string]::IsNullOrWhiteSpace($title)) { $title = [string]$candidate['Title'] }
@@ -546,10 +546,10 @@ function Find-ArtistMbidByName {
 $uri = 'https://musicbrainz.org/ws/2/artist/?query={0}&fmt=json&limit=8' -f $encodedArtist
         $headers = @{ 'User-Agent' = 'JukeboxDownloadWizard/0.3.0.0 (marquee metadata lookup)' }
         $response = Invoke-RestMethod -Uri $uri -Headers $headers -TimeoutSec 15
-        $foldedArtist = (($Artist.Normalize('FormD') -replace '\p{Mn}', '').ToLowerInvariant() -replace '\bac\s*/?\s*dc\b', 'acdc' -replace '\b(ft|feat|featuring|with|and|y|con|x)\b', ' ' -replace '[^\p{L}\p{Nd}]+', ' ' -replace '\s+', ' ').Trim()
+        $foldedArtist = (($Artist.Normalize('FormD') -replace '\p{Mn}', '').ToLowerInvariant() -replace '\bac\s*/?\s*dc\b', 'acdc' -replace '\b(ft|feat|featuring|with|and|y|con|x)\b', ' ' -replace '[^\p{L}\p{Nd}]+', ' ' -replace '\ba\s+ap\b', 'asap' -replace '\s+', ' ').Trim()
         $match = @($response.artists) | Sort-Object @{ Expression = {
             $score = [int]($_.score -as [int])
-            $name = ((([string]$_.name).Normalize('FormD') -replace '\p{Mn}', '').ToLowerInvariant() -replace '\bac\s*/?\s*dc\b', 'acdc' -replace '\b(ft|feat|featuring|with|and|y|con|x)\b', ' ' -replace '[^\p{L}\p{Nd}]+', ' ' -replace '\s+', ' ').Trim()
+            $name = ((([string]$_.name).Normalize('FormD') -replace '\p{Mn}', '').ToLowerInvariant() -replace '\bac\s*/?\s*dc\b', 'acdc' -replace '\b(ft|feat|featuring|with|and|y|con|x)\b', ' ' -replace '[^\p{L}\p{Nd}]+', ' ' -replace '\ba\s+ap\b', 'asap' -replace '\s+', ' ').Trim()
             if ($name -eq $foldedArtist) { $score += 100 }
             $score
         }; Descending = $true } | Select-Object -First 1
