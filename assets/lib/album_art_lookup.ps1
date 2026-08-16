@@ -148,6 +148,74 @@ function Get-NormalizedText {
     return $text.Trim()
 }
 
+function Test-NormalizedContains {
+    param([string]$Value, [string]$Needle)
+    if ([string]::IsNullOrWhiteSpace($Value) -or [string]::IsNullOrWhiteSpace($Needle)) { return $false }
+    return ($Value -match ('(^| )' + [regex]::Escape($Needle) + '( |$)'))
+}
+
+function Get-ArtistCreditText {
+    param($Recording)
+    $names = New-Object System.Collections.Generic.List[string]
+    foreach ($credit in @($Recording.'artist-credit')) {
+        if ($credit.name) { $names.Add([string]$credit.name) }
+        elseif ($credit.artist.name) { $names.Add([string]$credit.artist.name) }
+    }
+    return (($names | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ' & ')
+}
+
+function Test-RecordingCompatible {
+    param($Recording, [string]$ArtistValue, [string]$TitleValue)
+    if (-not $Recording -or [string]::IsNullOrWhiteSpace([string]$Recording.title)) { return $false }
+
+    $targetTitle = Get-NormalizedText $TitleValue
+    $recordingTitle = Get-NormalizedText ([string]$Recording.title)
+    if ([string]::IsNullOrWhiteSpace($targetTitle) -or [string]::IsNullOrWhiteSpace($recordingTitle)) { return $false }
+    $titleOk = ($recordingTitle -eq $targetTitle -or (Test-NormalizedContains $recordingTitle $targetTitle) -or (Test-NormalizedContains $targetTitle $recordingTitle))
+    if (-not $titleOk) { return $false }
+
+    if (-not (Test-KnownArtist $ArtistValue)) { return $true }
+    $targetArtist = Get-NormalizedText $ArtistValue
+    $artistCredit = Get-NormalizedText (Get-ArtistCreditText -Recording $Recording)
+    if ([string]::IsNullOrWhiteSpace($targetArtist) -or [string]::IsNullOrWhiteSpace($artistCredit)) { return $false }
+    return ($artistCredit -eq $targetArtist -or (Test-NormalizedContains $artistCredit $targetArtist) -or (Test-NormalizedContains $targetArtist $artistCredit))
+}
+
+function Test-PlaylistLikeTitle {
+    param([string]$Value)
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $false }
+    return ($Value -match '(?i)\b(playlist|hits|collection|collector|best\s+of|greatest\s+hits|number\s+ones|essential|ultimate|anthology|singles|various\s+artists|now\s+that''?s\s+what\s+i\s+call|karaoke|tribute|cover|workout|party|chill|mix|mega-?mix|live|anniversary|deluxe|expanded|edition)\b')
+}
+
+function Get-ReleaseFallbackScore {
+    param($Recording, $Release, [string]$TitleValue, [string]$ReleaseTitleValue)
+    if (-not $Release -or [string]::IsNullOrWhiteSpace([string]$Release.id)) { return -9999 }
+    if (Test-PlaylistLikeTitle ([string]$Release.title)) { return -9999 }
+    if ($Release.'release-group' -and (Test-PlaylistLikeTitle ([string]$Release.'release-group'.title))) { return -9999 }
+
+    $score = 0
+    $releaseName = Get-NormalizedText ([string]$Release.title)
+    $groupName = if ($Release.'release-group') { Get-NormalizedText ([string]$Release.'release-group'.title) } else { '' }
+    $titleName = Get-NormalizedText $TitleValue
+    $preferredName = if (-not [string]::IsNullOrWhiteSpace($ReleaseTitleValue)) { Get-NormalizedText $ReleaseTitleValue } else { $titleName }
+
+    foreach ($candidateName in @($releaseName, $groupName)) {
+        if ([string]::IsNullOrWhiteSpace($candidateName)) { continue }
+        if ($preferredName -and $candidateName -eq $preferredName) { $score += 260 }
+        elseif ($preferredName -and (Test-NormalizedContains $candidateName $preferredName)) { $score += 150 }
+        elseif ($titleName -and $candidateName -eq $titleName) { $score += 180 }
+        elseif ($titleName -and (Test-NormalizedContains $candidateName $titleName)) { $score += 90 }
+    }
+    if ([string]$Release.status -ieq 'Official') { $score += 40 }
+    switch ([string]$Release.country) {
+        'US' { $score += 35; break }
+        'XW' { $score += 25; break }
+        'GB' { $score += 18; break }
+    }
+    if ([string]$Release.date -match '^\d{4}(-\d{2})?(-\d{2})?$') { $score += 15 }
+    return $score
+}
+
 function Get-AppleArtworkUrl {
     param([string]$ArtistValue, [string]$ReleaseTitleValue, [string]$TitleValue)
 
@@ -164,16 +232,25 @@ function Get-AppleArtworkUrl {
         $targetTitle = Get-NormalizedText $TitleValue
         $best = @($result.results) |
             Where-Object { $_.artworkUrl100 -and $_.collectionName } |
+            ForEach-Object {
+                $artistName = Get-NormalizedText ([string]$_.artistName)
+                $collectionName = Get-NormalizedText ([string]$_.collectionName)
+                $artistOk = (-not $targetArtist) -or ($artistName -eq $targetArtist) -or (Test-NormalizedContains $artistName $targetArtist) -or (Test-NormalizedContains $targetArtist $artistName)
+                $releaseOk = $false
+                if ($targetRelease -and ($collectionName -eq $targetRelease -or (Test-NormalizedContains $collectionName $targetRelease) -or (Test-NormalizedContains $targetRelease $collectionName))) { $releaseOk = $true }
+                if ($targetTitle -and ($collectionName -eq $targetTitle -or (Test-NormalizedContains $collectionName $targetTitle) -or (Test-NormalizedContains $targetTitle $collectionName))) { $releaseOk = $true }
+                if ($artistOk -and $releaseOk) { $_ }
+            } |
             Sort-Object @{ Expression = {
                 $score = 0
                 $artistName = Get-NormalizedText ([string]$_.artistName)
                 $collectionName = Get-NormalizedText ([string]$_.collectionName)
                 if ($targetArtist -and $artistName -eq $targetArtist) { $score += 300 }
-                elseif ($targetArtist -and $artistName -match [regex]::Escape($targetArtist)) { $score += 120 }
+                elseif ($targetArtist -and (Test-NormalizedContains $artistName $targetArtist)) { $score += 120 }
                 elseif ($targetArtist) { $score -= 300 }
                 if ($targetRelease -and $collectionName -eq $targetRelease) { $score += 300 }
-                elseif ($targetRelease -and $collectionName -match [regex]::Escape($targetRelease)) { $score += 140 }
-                elseif ($targetTitle -and $collectionName -match [regex]::Escape($targetTitle)) { $score += 80 }
+                elseif ($targetRelease -and (Test-NormalizedContains $collectionName $targetRelease)) { $score += 140 }
+                elseif ($targetTitle -and (Test-NormalizedContains $collectionName $targetTitle)) { $score += 80 }
                 if ($collectionName -match '\bsingle\b') { $score -= 120 }
                 $score
             }; Descending = $true } |
@@ -222,7 +299,7 @@ if (([string]::IsNullOrWhiteSpace($Title) -and [string]::IsNullOrWhiteSpace($Rel
 
 New-Item -ItemType Directory -Path $CacheDir -Force | Out-Null
 $cachePrefix = if (Test-KnownArtist $Artist) { $Artist } else { 'unknown_artist' }
-$cacheKeySource = if (-not [string]::IsNullOrWhiteSpace($ReleaseMbid)) { $LookupMode + ' - release-v7 - ' + $ReleaseMbid } else { $LookupMode + ' - title-v5 - ' + $cachePrefix + ' - ' + $Title + ' - ' + $ReleaseTitle }
+$cacheKeySource = if (-not [string]::IsNullOrWhiteSpace($ReleaseMbid)) { $LookupMode + ' - release-v8 - ' + $ReleaseMbid } else { $LookupMode + ' - title-v6 - ' + $cachePrefix + ' - ' + $Title + ' - ' + $ReleaseTitle }
 $cacheKey = Get-SafeCacheName $cacheKeySource
 $coverPath = Join-Path $CacheDir ($cacheKey + '.jpg')
 $missPath = Join-Path $CacheDir ($cacheKey + '.miss')
@@ -263,14 +340,19 @@ $url = 'https://musicbrainz.org/ws/2/recording/?query=' + [uri]::EscapeDataStrin
 
 try {
     $result = Invoke-MusicBrainzJson -Url $url
-    $releaseIds = New-Object System.Collections.Generic.List[string]
-    foreach ($recording in @($result.recordings)) {
-        foreach ($release in @($recording.releases)) {
-            if ($release.id -and -not $releaseIds.Contains([string]$release.id)) {
-                $releaseIds.Add([string]$release.id)
+    $releaseIds = @($result.recordings |
+        Where-Object { Test-RecordingCompatible -Recording $_ -ArtistValue $Artist -TitleValue $Title } |
+        ForEach-Object {
+            $recording = $_
+            foreach ($release in @($recording.releases)) {
+                $score = Get-ReleaseFallbackScore -Recording $recording -Release $release -TitleValue $Title -ReleaseTitleValue $ReleaseTitle
+                if ($release.id -and $score -ge 80) {
+                    [pscustomobject]@{ Id = [string]$release.id; Score = $score }
+                }
             }
-        }
-    }
+        } |
+        Sort-Object @{ Expression = { $_.Score }; Descending = $true } |
+        Select-Object -ExpandProperty Id -Unique)
 
     foreach ($releaseId in $releaseIds) {
         if (Try-DownloadCover -ReleaseId $releaseId -OutputPath $coverPath) {
@@ -289,3 +371,4 @@ if (Try-DownloadAppleArtwork -ArtistValue $Artist -ReleaseTitleValue $ReleaseTit
 }
 
 Set-Content -LiteralPath $missPath -Value ((Get-Date).ToString('s')) -Encoding ASCII
+
