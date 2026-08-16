@@ -2894,6 +2894,28 @@ function Draw-ImageContain {
     finally { $attrs.Dispose() }
 }
 
+function Test-SquareFriendlyImageFile {
+    param(
+        [string]$Path,
+        [double]$MinRatio = 0.70,
+        [double]$MaxRatio = 1.45
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path -LiteralPath $Path)) { return $false }
+    try {
+        $img = [Drawing.Image]::FromFile($Path)
+        try {
+            if ($img.Width -le 0 -or $img.Height -le 0) { return $false }
+            $ratio = $img.Width / [double]$img.Height
+            return ($ratio -ge $MinRatio -and $ratio -le $MaxRatio)
+        }
+        finally { $img.Dispose() }
+    }
+    catch {
+        return $false
+    }
+}
+
 function Draw-ArtistLogoLayer {
     param(
         [Drawing.Graphics]$Graphics,
@@ -2981,10 +3003,10 @@ try {
     }
     $rightArtworkPath = ''
     $rightArtworkKind = 'logo'
-    if (-not [string]::IsNullOrWhiteSpace($artistLogoPath) -and (Test-Path -LiteralPath $artistLogoPath)) {
+    if (Test-SquareFriendlyImageFile -Path $artistLogoPath -MinRatio 0.45 -MaxRatio 2.20) {
         $rightArtworkPath = $artistLogoPath
         $rightArtworkKind = 'artist_logo'
-    } elseif (-not [string]::IsNullOrWhiteSpace($artistArtPath) -and (Test-Path -LiteralPath $artistArtPath)) {
+    } elseif (Test-SquareFriendlyImageFile -Path $artistArtPath -MinRatio 0.72 -MaxRatio 1.38) {
         $rightArtworkPath = $artistArtPath
         $rightArtworkKind = 'artist'
     } elseif (Test-Path -LiteralPath $OneSauceLogoPath) {
@@ -3385,7 +3407,8 @@ try {
                             }
                         }
                         if ($rightImage -ne $null) {
-                            Draw-ImageCover -Graphics $stillG -Image $rightImage -Rect $stillRightRect -Alpha 255
+                            $stillRightBounds = New-Object Drawing.RectangleF ([float]$stillRightRect.X), ([float]$stillRightRect.Y), ([float]$stillRightRect.Width), ([float]$stillRightRect.Height)
+                            Draw-ImageContain -Graphics $stillG -Image $rightImage -Bounds $stillRightBounds -Alpha 255
                         }
 
                         $stillTitleText = [string]($parts['Title'])
