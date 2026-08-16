@@ -677,6 +677,7 @@ function Download-Videos {
     $failed = 0
     $total = 0
     $format = if ($DownloadAudioOnly) { 'bestaudio/best' } else { "bestvideo[vcodec*=$VideoCodec][height<=$Height]+bestaudio[ext=$AudioExt]/best[ext=$VideoExt][height<=$Height]" }
+    $fallbackFormat = if ($DownloadAudioOnly) { '' } else { "best[ext=$VideoExt][height<=$Height]/best[height<=$Height]/best" }
     $outputControl = '%(title).70s.%(ext)s'
     $mediaLabel = if ($DownloadAudioOnly) { 'audio' } else { 'videos' }
     $newFileExtension = if ($DownloadAudioOnly) { '.mp3' } else { '.mp4' }
@@ -717,6 +718,18 @@ function Download-Videos {
             $url
         )
         $downloadExitCode = Invoke-YtDlpDownload -Arguments $args
+        if ($downloadExitCode -ne 0 -and -not $DownloadAudioOnly -and -not [string]::IsNullOrWhiteSpace($fallbackFormat)) {
+            Write-Host "Primary video format failed. Retrying with fallback video format..."
+            Write-Log $DownloadLog 'WARN' "Primary video format failed for $url. Retrying with fallback format: $fallbackFormat"
+            $retryArgs = @($args)
+            for ($i = 0; $i -lt ($retryArgs.Count - 1); $i++) {
+                if ($retryArgs[$i] -eq '-f') {
+                    $retryArgs[$i + 1] = $fallbackFormat
+                    break
+                }
+            }
+            $downloadExitCode = Invoke-YtDlpDownload -Arguments $retryArgs
+        }
         if ($downloadExitCode -eq 0) {
             $cleanupListFile = Join-Path $ResourceTempDir ('cleanup_files_' + [Guid]::NewGuid().ToString('N') + '.txt')
             try {

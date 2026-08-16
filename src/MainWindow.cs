@@ -1776,7 +1776,7 @@ private const string AppVersion = "0.3.0.0";
             bool normalizeAudio;
             if (!ChooseDownloadOptions(out audioOnly, out resolution, out normalizeAudio)) { return; }
 
-            MarqueeGenerationOptions options = ChooseMarqueeGenerationOptions();
+            MarqueeGenerationOptions options = ChooseMarqueeGenerationOptions(true);
             if (options == null) { return; }
 
             if (audioOnly)
@@ -1813,7 +1813,7 @@ private const string AppVersion = "0.3.0.0";
 
             if (!EnsureSelectedMarqueeFileNamesWithinLimit(ref selected)) { return; }
 
-            MarqueeGenerationOptions options = ChooseMarqueeGenerationOptions();
+            MarqueeGenerationOptions options = ChooseMarqueeGenerationOptions(false);
             if (options == null) { return; }
 
             string listFile = Path.Combine(Path.GetTempPath(), "jdw_marquee_selection_" + Guid.NewGuid().ToString("N") + ".txt");
@@ -1821,7 +1821,7 @@ private const string AppVersion = "0.3.0.0";
             InvokeBackend(new[] { "-Action", "GenerateMarquees", "-Value", listFile, "-GenerateStandardMarquee", options.Standard.ToString(), "-GenerateFullColorMarquee", options.FullColor.ToString(), "-GenerateVideoMarquee", options.Animated.ToString() }, "Generating marquees...");
         }
 
-        private MarqueeGenerationOptions ChooseMarqueeGenerationOptions()
+        private MarqueeGenerationOptions ChooseMarqueeGenerationOptions(bool allowNone = false)
         {
             Window dialog = new Window
             {
@@ -1846,7 +1846,7 @@ private const string AppVersion = "0.3.0.0";
 
             TextBlock header = new TextBlock
             {
-                Text = "Choose which marquee type(s) to generate:",
+                Text = allowNone ? "Choose marquee type(s), or leave all unchecked for download only:" : "Choose which marquee type(s) to generate:",
                 Foreground = Brush("#E5E7EB"),
                 FontWeight = FontWeights.SemiBold,
                 Margin = new Thickness(0, 0, 0, 12)
@@ -1857,7 +1857,7 @@ private const string AppVersion = "0.3.0.0";
             Grid.SetRow(choices, 1);
             root.Children.Add(choices);
 
-            CheckBox standard = MarqueeTypeCheckBox("Standard", true);
+            CheckBox standard = MarqueeTypeCheckBox("Standard", !allowNone);
             CheckBox fullColor = MarqueeTypeCheckBox("Full Color");
             CheckBox animated = MarqueeTypeCheckBox("Animated");
             choices.Children.Add(standard);
@@ -1891,7 +1891,7 @@ private const string AppVersion = "0.3.0.0";
             updateWarning();
 
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 14, 0, 0) };
-            Button ok = Button("Generate", 110, 34);
+            Button ok = Button(allowNone ? "Continue" : "Generate", 110, 34);
             Button cancel = Button("Cancel", 100, 34);
             ok.Background = Brush("#16A34A");
             ok.BorderBrush = Brush("#22C55E");
@@ -1905,7 +1905,7 @@ private const string AppVersion = "0.3.0.0";
             MarqueeGenerationOptions selected = null;
             ok.Click += delegate
             {
-                if (standard.IsChecked != true && fullColor.IsChecked != true && animated.IsChecked != true)
+                if (!allowNone && standard.IsChecked != true && fullColor.IsChecked != true && animated.IsChecked != true)
                 {
                     ShowAppInfo("Choose at least one marquee type.", "Choose Marquee Types");
                     return;
