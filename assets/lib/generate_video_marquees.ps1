@@ -351,7 +351,7 @@ function Clean-MarqueeText {
     param([string]$Text)
     if ([string]::IsNullOrWhiteSpace($Text)) { return '' }
     $noiseWords = 'official\s+music\s+video|official\s+video|official\s+audio|official\s+lyric\s+video|official|lyric\s+video|lyrics?|visuali[sz]er|performance\s+video|music\s+video|audio|hd|hq|sd|4k|[0-9]{3,4}p|remaster(?:ed)?|karaoke|unreleased\s+video|new\s+unreleased\s+video|new\s+video'
-    $contextNoiseWords = $noiseWords + '|live\s+(?:at|from|in|on)\b.*|sub(?:titula[dd][ao]?|itula[dd][ao]?|t[ií]tulos?)|espa[nñ]ol|ingl[eé]s|legendado|tradu[cç][aã]o|traducao|translated|translation'
+    $contextNoiseWords = $noiseWords + '|live\s+(?:at|from|in|on)\b.*|sub(?:titula[dd][ao]?|itula[dd][ao]?|t[i?]tulos?)|espa[n?]ol|ingl[e?]s|legendado|tradu[c?][a?]o|traducao|translated|translation'
     $clean = (Repair-TextEncoding $Text) -replace '(?i)\s+\(JUKE\)\s*$', ''
     $clean = $clean -replace '[\p{Cc}\p{Cf}]', ' '
     $clean = $clean -replace '(?i)\s+\b(with|w/)\s+lyrics?\b.*$', ''
@@ -654,7 +654,7 @@ function Get-TitleLookupCandidates {
         $results.Add('AIR FORCE (BLACK DEMARCO)')
         $results.Add('WHISKEY / BLACK DEMARCO')
     }
-    $dashParts = @($clean -split '\s*[-–—]+\s*' | ForEach-Object { Clean-MarqueeTitle $_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and $_.Length -ge 2 })
+    $dashParts = @($clean -split '\s*[-??]+\s*' | ForEach-Object { Clean-MarqueeTitle $_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and $_.Length -ge 2 })
     if ($dashParts.Count -gt 1) {
         foreach ($part in $dashParts) { $results.Add($part) }
     }
@@ -2985,7 +2985,7 @@ try {
     }
     $albumCoverPath = if (Test-AlbumCoverLookupAllowed -Parts $parts) { Get-AlbumCoverPath -Parts $parts } else { '' }
     $artistLogoPath = Get-ArtistLogoPath -Parts $parts
-    $artistArtPath = if ([string]::IsNullOrWhiteSpace($albumCoverPath) -or [string]::IsNullOrWhiteSpace($artistLogoPath)) { Get-ArtistArtPath -Parts $parts } else { '' }
+    $artistArtPath = Get-ArtistArtPath -Parts $parts
     $leftArtworkKind = 'album'
     $artworkPath = ''
     if (-not [string]::IsNullOrWhiteSpace($albumCoverPath) -and (Test-Path -LiteralPath $albumCoverPath)) {
@@ -3003,10 +3003,10 @@ try {
     }
     $rightArtworkPath = ''
     $rightArtworkKind = 'logo'
-    if (Test-SquareFriendlyImageFile -Path $artistLogoPath -MinRatio 0.45 -MaxRatio 2.20) {
+    if (-not [string]::IsNullOrWhiteSpace($artistLogoPath) -and (Test-Path -LiteralPath $artistLogoPath)) {
         $rightArtworkPath = $artistLogoPath
         $rightArtworkKind = 'artist_logo'
-    } elseif (Test-SquareFriendlyImageFile -Path $artistArtPath -MinRatio 0.72 -MaxRatio 1.38) {
+    } elseif (Test-SquareFriendlyImageFile -Path $artistArtPath -MinRatio 0.55 -MaxRatio 1.85) {
         $rightArtworkPath = $artistArtPath
         $rightArtworkKind = 'artist'
     } elseif (Test-Path -LiteralPath $OneSauceLogoPath) {
@@ -3493,3 +3493,4 @@ finally {
     if ($PrivateFonts) { $PrivateFonts.Dispose() }
     if (Test-Path -LiteralPath $tempDir) { Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue }
 }
+
